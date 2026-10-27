@@ -39,11 +39,9 @@ flowchart LR
 ## 快速开始
 
 ```bash
-# 语料不内置，从上游取
-git clone --depth 1 https://github.com/datawhalechina/all-in-rag.git /tmp/all-in-rag
-mkdir -p data/C8 && cp -r /tmp/all-in-rag/data/C8/cook data/C8/cook
+python scripts/fetch_data.py                            # 拉 323 篇菜谱到 data/C8/cook
 
-docker compose -f docker-compose.milvus.yml up -d      # milvus v2.5.14
+docker compose -f docker-compose.milvus.yml up -d       # milvus v2.5.14
 curl -f http://localhost:9091/healthz
 
 pip install -r requirements.txt
@@ -53,9 +51,23 @@ python -m rag_core.cli build  --config configs/base.yaml
 python -m rag_core.cli search "简单的素菜，10 分钟能做好" --max-difficulty 2
 python -m rag_core.cli search "红烧肉要炖多久" --arms sparse   # 只跑稀疏臂
 python -m rag_core.cli ask    "红烧肉要炖多久" --json
+
+python scripts/selfcheck.py --config configs/base.yaml  # 五项自检 + 落盘报告
 ```
 
 无 GPU：`embedding.provider` 换 `openai_compatible`；无 Docker：`store.backend` 换 `local`。
+逐步验收与排错见 [`docs/02-runbook.md`](docs/02-runbook.md)。
+
+### 自检输出（本地 hashing 向量，只验证机制）
+
+| 检查 | 结果 |
+|---|---|
+| 索引确定性 | 两次切块 `chunk_id` / `parent_id` 逐条一致，1701 块无重复 |
+| 排除目录 | `template/示例菜` 未入索引（323 篇 → 322 篇） |
+| 分词（gold=菜名） | `char_bigram` 命中 92% Hit@1；`whitespace`（上游）0% |
+| 过滤下推 | `pre` 合规率 100% / 平均候选 164；`post` 合规率 40% / 候选 1701 |
+
+dense 臂数字要在服务器上换真 embedding 才有意义，届时替换上表。
 
 ## 目录
 
@@ -64,8 +76,9 @@ rag_core/       检索底座（14 模块）：切分 / 索引 / 双路召回 / R
 agent/          P2：LangGraph 状态机（understand → plan → act → reflect）
 tools/          P2：检索能力的 function calling schema
 eval/           P1：评测集、指标、消融脚本
+scripts/        取语料（fetch_data.py）与自检（selfcheck.py）
 configs/        一份 YAML = 一次实验
-docs/           设计说明与实验记录
+docs/           01-design 设计说明 · 02-runbook 服务器跑通手册
 ```
 
 `agent/`、`tools/`、`eval/` 目前只有设计说明，代码在 P1/P2 落地。

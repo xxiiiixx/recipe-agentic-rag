@@ -84,7 +84,7 @@ class RecipeRAG:
                 base_url=cfg.embedding.base_url,
                 api_key=cfg.embedding.api_key,
             )
-            cfg.store.dim = getattr(embedder, "dim", cfg.store.dim)
+            cfg.store.dim = getattr(embedder, "dim", 0) or cfg.embedding.dim
             store = build_store(cfg.store)
             vectors = embedder.encode([c.text for c in dataset.chunks])
             store.upsert(dataset.chunks, vectors)

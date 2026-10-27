@@ -77,6 +77,7 @@ class StoreCfg:
     token: str = "${MILVUS_TOKEN}"
     collection: str = "recipe_chunks"
     metric: str = "COSINE"
+    dim: int = 0  # 0 表示跟随 embedding.dim；与已有 collection 维度不一致会自动重建
     recreate: bool = False
     local_dir: str = "artifacts/local_index"
 
