@@ -103,21 +103,9 @@ python -m rag_core.cli ask "红烧肉要炖多久，怎么判断收汁好了"
 python scripts/selfcheck.py --config configs/base.yaml
 ```
 
-输出五段：索引确定性、分词消融、检索臂对比、过滤下推、上下文组装；同时写 `artifacts/selfcheck/*.json` 留档。
+输出五段：索引确定性、分词消融、检索臂对比、过滤下推、上下文组装；同时写 `artifacts/selfcheck/*.json` 留档。本地跑出的一组示例数字见 [README](../README.md) 的「自检输出」一节——那组数只证明机制通了，dense 臂要换真 embedding 才有意义。
 
-本地 hashing 向量的一次真实输出（仅证明机制，dense 臂数字无意义）：
-
-```
-分词               有命中   Hit@1   Hit@5     ↑ chunk 级，gold=菜名
-char_bigram         100%     92%    100%
-whitespace            0%      0%      0%     ← 上游 langchain 默认分词
-
-过滤下推          平均候选  合规率
-pre                   164    100%
-post                 1701     40%           ← 先检索后过滤，被不合格父文档挤占
-```
-
-服务器上换真 embedding 后重跑，把 `arm` 三行与 `pre/post` 两行抄进 README 的消融表。
+服务器上换真 embedding 后重跑，把三行臂结果与 `pre/post` 两行抄进 README 的消融表。
 
 ## 8. 常见错误
 
