@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# 实验产物：索引、评测结果、trace 都不进仓库（体积大且可由配置复现）
+artifacts/
+*.npy
+*.db
+*.sqlite3
+
+# 语料：不内置 all-in-rag 的数据，按 README 自行下载
+data/
+
+# 密钥与本地覆盖
+.env
+.env.*
+!.env.example
+configs/local*.yaml
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

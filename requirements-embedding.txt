@@ -1,0 +1,3 @@
+# 本地跑 embedding 模型（CPU 即可，300 篇语料几十秒）
+sentence-transformers>=3.0
+torch>=2.2

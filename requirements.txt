@@ -1,0 +1,9 @@
+# 检索底座的核心依赖（不装 torch 也能跑：BM25 + Milvus 过滤 + 直方图评估）
+numpy>=1.26,<3
+PyYAML>=6.0
+pymilvus>=2.5.0,<2.6          # 与 docker-compose.milvus.yml 的 milvus v2.5.14 对齐
+jieba>=0.42.1                 # 中文分词（char_bigram 不需要它，jieba 臂需要）
+openai>=1.40.0                # LLM / embedding 均走 OpenAI 兼容协议
+
+# 需要本地跑向量模型时再装（会拉 torch，约 2GB）：
+#   pip install -r requirements-embedding.txt

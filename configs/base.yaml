@@ -1,0 +1,61 @@
+# 基线配置：一份 YAML 描述一次实验的全部变量。
+# 消融时不要改这份文件，复制到 configs/ablation/ 下改其中一两项，
+# 每份 YAML 与实验报告一一对应（这是"可复现"的具体落法）。
+
+name: base
+workspace: artifacts
+seed: 42
+
+dataset:
+  # 指向 all-in-rag 仓库的 data/C8/cook（本仓库不内置语料，见 README「数据准备」）
+  root: data/C8/cook
+  exclude_dirs: ["template"]   # 投稿模板不是菜谱，上游 rglob 会把它吃进索引
+  max_level: 3                 # 按 #/##/### 切分
+  drop_comments: true          # 剥离 <!-- 贡献者说明 -->
+  min_chunk_chars: 8
+
+embedding:
+  provider: sentence_transformers   # sentence_transformers | openai_compatible | hashing(仅冒烟)
+  model: BAAI/bge-small-zh-v1.5
+  dim: 512
+  batch_size: 32
+  # provider 为 openai_compatible 时使用：
+  base_url: https://api.siliconflow.cn/v1
+  api_key: ${EMBEDDING_API_KEY}
+
+store:
+  backend: milvus              # milvus | local
+  uri: http://localhost:19530
+  token: ${MILVUS_TOKEN}
+  collection: recipe_chunks
+  metric: COSINE
+  recreate: false              # true 会先 drop collection，慎用
+  local_dir: artifacts/local_index
+
+retrieval:
+  top_k: 5                     # 融合后返回的子块数
+  dense_k: 10                  # 单路召回深度（融合前）
+  sparse_k: 10
+  rrf_k: 60                    # RRF 平滑常数（上游也是 60，本项目单独扫）
+  filter_mode: pre             # pre=过滤下推（修上游缺陷）/ post=先检索后过滤（复现上游）
+  parent_strategy: rrf_sum     # rrf_sum（默认）| hit_count（复现上游）| max_score
+  parent_top_n: 2
+  arms: [dense, sparse]        # 消融开关：只写一个就是单路
+  tokenizer: char_bigram       # char_bigram | jieba | whitespace（=上游 langchain 默认的 text.split()）
+  bm25_k1: 1.5
+  bm25_b: 0.75
+  embed_query_prefix: ""       # bge-zh 检索指令前缀，留空代表不做查询侧改写
+
+context:
+  token_budget: 1800           # 每次问答给模型的上下文预算
+  per_doc_budget: 900          # 单篇菜谱最多占多少
+  min_doc_tokens: 80           # 剩余预算低于此值不再塞新文档
+
+llm:
+  model: moonshot-v1-8k        # 填 mock/none 则跳过生成，只做检索实验
+  base_url: https://api.moonshot.cn/v1
+  api_key: ${LLM_API_KEY}
+  temperature: 0.1
+  max_tokens: 1024
+  timeout: 60.0
+  max_retries: 2
