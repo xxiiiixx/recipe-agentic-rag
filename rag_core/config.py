@@ -54,7 +54,6 @@ def _fill(obj: Any, data: Dict[str, Any]) -> Any:
 @dataclass
 class DatasetCfg:
     root: str = "data/C8/cook"
-    exclude_dirs: List[str] = field(default_factory=lambda: ["template"])
     max_level: int = 3
     drop_comments: bool = True
     min_chunk_chars: int = 8

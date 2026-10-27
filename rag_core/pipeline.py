@@ -60,7 +60,6 @@ class RecipeRAG:
     def build(cls, cfg: AppConfig, *, skip_embedding: bool = False) -> "RecipeRAG":
         ds_cfg = DatasetConfig(
             root=cfg.dataset.root,
-            exclude_dirs=list(cfg.dataset.exclude_dirs),
             max_level=cfg.dataset.max_level,
             drop_comments=cfg.dataset.drop_comments,
             min_chunk_chars=cfg.dataset.min_chunk_chars,

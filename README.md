@@ -10,7 +10,7 @@ C8 串通了流程，但有几处会直接毁掉实验结论的地方（逐条�
 
 | 问题 | 位置 | 处理 |
 |---|---|---|
-| `rglob("*.md")` 把投稿模板 `template/示例菜` 当菜谱入库 | `data_preparation.py:59` | `exclude_dirs` 排除 |
+| `rglob("*.md")` 把投稿模板 `template/示例菜` 当菜谱入库 | `data_preparation.py:59` | 取数后删掉 `dishes/template` |
 | `child_id = uuid4()`，两次建库 ID 全变，qrels 无法锚定 | `data_preparation.py:200` | `md5(父ID + 章节路径 + 序号)` |
 | 只存 `difficulty='★★★'`，无法范围过滤 | `data_preparation.py:117` | 另存 `difficulty_level: int` |
 | 先取 `top_k*3` 再后置过滤，条件越严召回越漏 | `retrieval_optimization.py` | 过滤下推（Milvus `filter=` / 本地掩码） |
@@ -39,7 +39,11 @@ flowchart LR
 ## 快速开始
 
 ```bash
-python scripts/fetch_data.py                            # 拉 323 篇菜谱到 data/C8/cook
+# 语料：直接取上游 data/C8/cook，再删掉投稿模板（一次性清洗，代码里不留排除规则）
+curl -L https://codeload.github.com/datawhalechina/all-in-rag/tar.gz/refs/heads/main -o /tmp/air.tgz
+tar -xzf /tmp/air.tgz -C /tmp && mkdir -p data/C8
+cp -r /tmp/all-in-rag-main/data/C8/cook data/C8/ && rm -rf data/C8/cook/dishes/template
+find data/C8/cook -name '*.md' | wc -l          # 322
 
 docker compose -f docker-compose.milvus.yml up -d       # milvus v2.5.14
 curl -f http://localhost:9091/healthz
@@ -63,7 +67,7 @@ python scripts/selfcheck.py --config configs/base.yaml  # 五项自检 + 落盘�
 | 检查 | 结果 |
 |---|---|
 | 索引确定性 | 两次切块 `chunk_id` / `parent_id` 逐条一致，1701 块无重复 |
-| 排除目录 | `template/示例菜` 未入索引（323 篇 → 322 篇） |
+| 语料洁净度 | 322 篇全为真菜谱，`template/示例菜` 已在取数时删除 |
 | 分词（gold=菜名） | `char_bigram` 命中 92% Hit@1；`whitespace`（上游）0% |
 | 过滤下推 | `pre` 合规率 100% / 平均候选 164；`post` 合规率 40% / 候选 1701 |
 
@@ -76,7 +80,7 @@ rag_core/       检索底座（14 模块）：切分 / 索引 / 双路召回 / R
 agent/          P2：LangGraph 状态机（understand → plan → act → reflect）
 tools/          P2：检索能力的 function calling schema
 eval/           P1：评测集、指标、消融脚本
-scripts/        取语料（fetch_data.py）与自检（selfcheck.py）
+scripts/        自检脚本：确定性 / 分词 / 检索臂 / 过滤下推 / 上下文
 configs/        一份 YAML = 一次实验
 docs/           01-design 设计说明 · 02-runbook 服务器跑通手册
 ```

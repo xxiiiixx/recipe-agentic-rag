@@ -6,7 +6,7 @@
 
 | 缺陷 | 处理 | 依据 |
 |---|---|---|
-| 模板入库 | `_iter_files()` 按 `exclude_dirs` 跳过整棵子树 | `template/示例菜` 含"请在此处填写"，会被宽泛查询召回 |
+| 模板入库 | 取数时删掉 `dishes/template`，代码不再背排除规则 | `template/示例菜` 含"请在此处填写"，会被宽泛查询召回；数据一次性清洗比在每个入口都排除更省事 |
 | ID 不可复现 | `chunk_id = md5(parent_id ‖ section_path ‖ idx)` | 上游 uuid 让评测集只能退化到父文档粒度，父子块价值归零 |
 | 难度只有字符串 | 同时存 `difficulty`(展示) 与 `difficulty_level`(过滤) | 未识别记 0 且不满足范围条件——"未知"不该混进"简单" |
 | 过滤在检索之后 | `SearchFilter` 下推：Milvus `filter=expr` / 本地布尔掩码 | 上游取 `top_k*3` 后过滤，条件越严凑不满，且白花 3 倍算力 |

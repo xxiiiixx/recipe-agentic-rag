@@ -7,9 +7,8 @@ workspace: artifacts
 seed: 42
 
 dataset:
-  # 指向 all-in-rag 仓库的 data/C8/cook（本仓库不内置语料，见 README「数据准备」）
+  # 指向 all-in-rag 仓库的 data/C8/cook（本仓库不内置语料，取数方式见 README）
   root: data/C8/cook
-  exclude_dirs: ["template"]   # 投稿模板不是菜谱，上游 rglob 会把它吃进索引
   max_level: 3                 # 按 #/##/### 切分
   drop_comments: true          # 剥离 <!-- 贡献者说明 -->
   min_chunk_chars: 8

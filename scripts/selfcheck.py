@@ -62,8 +62,8 @@ FILTER_PROBES = (
 
 
 # --------------------------------------------------------------------------- 1
-def check_dataset(root: str, exclude: Sequence[str], seed: int) -> Tuple[RecipeDataset, List[str]]:
-    cfg = DatasetConfig(root=root, exclude_dirs=list(exclude))
+def check_dataset(root: str, seed: int) -> Tuple[RecipeDataset, List[str]]:
+    cfg = DatasetConfig(root=root)
     first = RecipeDataset(cfg).load().build_chunks()
     second = RecipeDataset(cfg).load().build_chunks()
 
@@ -78,8 +78,8 @@ def check_dataset(root: str, exclude: Sequence[str], seed: int) -> Tuple[RecipeD
     print(f"   菜谱 {len(first.recipes)} 篇 / 子块 {len(first.chunks)} 个 "
           f"/ 平均块长 {first.stats()['avg_chunk_chars']} 字")
     print(f"   两次切块 id 完全一致：{'是' if stable else '否'}；chunk_id 唯一：{'是' if unique else '否'}")
-    leaked = [r.source_rel for r in first.recipes if any(x in r.source_rel for x in exclude)]
-    print(f"   排除目录泄漏：{len(leaked)} 篇 {leaked[:3]}")
+    dirty = [r.source_rel for r in first.recipes if "template" in r.source_rel]
+    print(f"   语料洁净度：模板/示例 {len(dirty)} 篇 {dirty[:3]}（应为 0，取数时已删除）")
 
     rng = random.Random(seed)
     names = sorted({r.dish_name for r in first.recipes if len(r.dish_name) >= 2})
@@ -181,7 +181,7 @@ def build_config(args) -> AppConfig:
         return AppConfig.from_yaml(args.config)
     return AppConfig(
         name="selfcheck",
-        dataset=DatasetCfg(root=args.root, exclude_dirs=["template"]),
+        dataset=DatasetCfg(root=args.root),
         embedding=EmbeddingCfg(provider=args.embedding, model=args.model, dim=args.dim),
         store=StoreCfg(backend=args.backend, uri=args.uri, collection=args.collection,
                        recreate=True),
@@ -209,11 +209,11 @@ def main() -> int:
     args = parser.parse_args()
 
     if not Path(args.root).exists() and not args.config:
-        print(f"语料目录不存在：{args.root}（先跑 python scripts/fetch_data.py）", file=sys.stderr)
+        print(f"语料目录不存在：{args.root}（先按下文第 3 节取数）", file=sys.stderr)
         return 2
 
     cfg = build_config(args)
-    dataset, probes = check_dataset(cfg.dataset.root, cfg.dataset.exclude_dirs, args.seed)
+    dataset, probes = check_dataset(cfg.dataset.root, args.seed)
     check_tokenizer(dataset, probes)
 
     started = time.perf_counter()

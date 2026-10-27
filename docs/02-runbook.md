@@ -38,12 +38,14 @@ docker compose -f docker-compose.milvus.yml ps
 ## 3. 取语料
 
 ```bash
-python scripts/fetch_data.py
-# 已下载 323 篇菜谱 -> data/C8/cook
-#   meat_dish / vegetable_dish / staple / ...
+curl -L https://codeload.github.com/datawhalechina/all-in-rag/tar.gz/refs/heads/main -o /tmp/air.tgz
+tar -xzf /tmp/air.tgz -C /tmp && mkdir -p data/C8
+cp -r /tmp/all-in-rag-main/data/C8/cook data/C8/
+rm -rf data/C8/cook/dishes/template          # 投稿模板，不是菜谱
+find data/C8/cook -name '*.md' | wc -l       # 322
 ```
 
-脚本流式解包上游 tar，只落 `data/C8/cook/dishes/**.md`。**323 篇里有 1 篇是 `template/示例菜`，建库时会按 `dataset.exclude_dirs` 排除**，因此索引里应为 322 篇。
+语料不入库（`.gitignore` 里有 `data/`），这四行是唯一的数据准备步骤。**清洗只做一次**：`template/示例菜` 删掉之后，代码里不再需要任何排除规则；重新取数时记得再删一次。
 
 ## 4. 选 embedding
 
@@ -57,7 +59,7 @@ python scripts/fetch_data.py
 cat > configs/local-api.yaml <<'YAML'
 name: api
 workspace: artifacts
-dataset: {root: data/C8/cook, exclude_dirs: ["template"]}
+dataset: {root: data/C8/cook}
 embedding:
   provider: openai_compatible
   model: BAAI/bge-m3

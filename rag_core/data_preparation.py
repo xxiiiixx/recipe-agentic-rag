@@ -4,7 +4,7 @@
 
 | 上游问题 | 上游位置 | 本实现 |
 | --- | --- | --- |
-| ``rglob("*.md")`` 把 ``template/`` 投稿模板当菜谱入库 | L59 | ``exclude_dirs`` 显式排除，且默认包含 ``template`` |
+| ``rglob("*.md")`` 把 ``template/`` 投稿模板当菜谱入库 | L59 | 取数时删掉 ``dishes/template``，语料只有真菜谱 |
 | ``chunk_id = uuid4()``，两次建库 ID 不同，qrels 无法锚定 | L200 | ``chunk_id = md5(parent_id, 章节路径, 序号)`` |
 | 只存 ``difficulty='★★★'`` 字符串，无法范围过滤 | L117-123 | 额外存 ``difficulty_level``（1-5，0=未识别） |
 | ``CATEGORY_LABELS = list(set(...))``，顺序不稳定 | L31 | 用 ``OrderedDict`` 保序，标签顺序固定 |
@@ -18,7 +18,7 @@ import json
 import logging
 import re
 from collections import Counter, OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -72,7 +72,6 @@ def parse_difficulty(text: str) -> Tuple[int, str]:
 @dataclass
 class DatasetConfig:
     root: str
-    exclude_dirs: List[str] = field(default_factory=lambda: ["template"])
     max_level: int = 3
     drop_comments: bool = True
     min_chunk_chars: int = 8
@@ -89,11 +88,8 @@ class RecipeDataset:
 
     # ------------------------------------------------------------------ load
     def _iter_files(self) -> Iterable[Path]:
-        excluded = {d.strip("/") for d in self.cfg.exclude_dirs}
         for path in sorted(self.root.rglob("*.md")):
             rel = path.relative_to(self.root)
-            if any(part in excluded for part in rel.parts[:-1]):
-                continue
             if any(part.startswith(".") for part in rel.parts):
                 continue
             yield path
@@ -130,7 +126,7 @@ class RecipeDataset:
             )
 
         self.recipes = recipes
-        logger.info("加载 %d 篇菜谱（排除目录：%s）", len(recipes), self.cfg.exclude_dirs)
+        logger.info("加载 %d 篇菜谱（根目录 %s）", len(recipes), self.root)
         return self
 
     # ----------------------------------------------------------------- chunk
