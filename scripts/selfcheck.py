@@ -209,7 +209,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if not Path(args.root).exists() and not args.config:
-        print(f"语料目录不存在：{args.root}（先按下文第 3 节取数）", file=sys.stderr)
+        print(f"语料目录不存在：{args.root}（信号：data/C8/cook 未就位，语料随仓库提供）", file=sys.stderr)
         return 2
 
     cfg = build_config(args)

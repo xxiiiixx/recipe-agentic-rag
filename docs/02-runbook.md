@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | Python | 3.10+ | `python -V` |
 | Docker | 仅 Milvus 后端需要 | `docker info` |
-| 磁盘 | 语料 20MB，模型 100–500MB | `df -h .` |
+| 磁盘 | 仓库含语料 1.5MB；模型权重 100–500MB | `df -h .` |
 | 网络 | 拉 codeload / PyPI / 模型权重 | `curl -I https://codeload.github.com` |
 
 ## 1. 装依赖
@@ -35,17 +35,15 @@ docker compose -f docker-compose.milvus.yml ps
 
 三个容器（etcd / minio / milvus-standalone）都在 `running` 才算好。端口冲突就改 compose 里的映射，同时改配置 `store.uri`。
 
-## 3. 取语料
+## 3. 语料
+
+已随仓库提供，clone 即有，直接进入下一步。
 
 ```bash
-curl -L https://codeload.github.com/datawhalechina/all-in-rag/tar.gz/refs/heads/main -o /tmp/air.tgz
-tar -xzf /tmp/air.tgz -C /tmp && mkdir -p data/C8
-cp -r /tmp/all-in-rag-main/data/C8/cook data/C8/
-rm -rf data/C8/cook/dishes/template          # 投稿模板，不是菜谱
 find data/C8/cook -name '*.md' | wc -l       # 322
 ```
 
-语料不入库（`.gitignore` 里有 `data/`），这四行是唯一的数据准备步骤。**清洗只做一次**：`template/示例菜` 删掉之后，代码里不再需要任何排除规则；重新取数时记得再删一次。
+只有更新上游语料时才需要重取（来源、清洗规则与已知噪声见 [`data/README.md`](../data/README.md)）。语料变了，块数与「语料洁净度」会跟着变，实验报告要同步改。
 
 ## 4. 选 embedding
 

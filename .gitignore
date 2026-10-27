@@ -12,8 +12,8 @@ artifacts/
 *.db
 *.sqlite3
 
-# 语料：不内置 all-in-rag 的数据，按 README 自行下载
-data/
+# 语料随仓库提供（322 篇，1.5 MB）；本地新增的临时数据目录仍忽略
+data/tmp/
 
 # 密钥与本地覆盖
 .env

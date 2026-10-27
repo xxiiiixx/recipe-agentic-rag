@@ -24,7 +24,7 @@ C8 串通了流程，但有几处会直接毁掉实验结论的地方（逐条�
 
 ```mermaid
 flowchart LR
-    A[data/C8/cook<br/>323 篇菜谱] --> B[确定性切分]
+    A[data/C8/cook<br/>322 篇菜谱] --> B[确定性切分]
     B --> C[Embedding] --> D[(Milvus<br/>向量 + INVERTED 索引)]
     B --> E[BM25<br/>可切换分词]
     F[SearchFilter] -->|下推| D
@@ -39,12 +39,7 @@ flowchart LR
 ## 快速开始
 
 ```bash
-# 语料：直接取上游 data/C8/cook，再删掉投稿模板（一次性清洗，代码里不留排除规则）
-curl -L https://codeload.github.com/datawhalechina/all-in-rag/tar.gz/refs/heads/main -o /tmp/air.tgz
-tar -xzf /tmp/air.tgz -C /tmp && mkdir -p data/C8
-cp -r /tmp/all-in-rag-main/data/C8/cook data/C8/ && rm -rf data/C8/cook/dishes/template
-find data/C8/cook -name '*.md' | wc -l          # 322
-
+# 语料已随仓库提供：data/C8/cook 共 322 篇（来源、清洗与噪声见 data/README.md）
 docker compose -f docker-compose.milvus.yml up -d       # milvus v2.5.14
 curl -f http://localhost:9091/healthz
 
@@ -77,6 +72,7 @@ dense 臂数字要在服务器上换真 embedding 才有意义，届时替换上
 
 ```
 rag_core/       检索底座（14 模块）：切分 / 索引 / 双路召回 / RRF / 上下文 / 生成
+data/C8/cook/   语料：322 篇菜谱（来源与清洗说明见 data/README.md）
 agent/          P2：LangGraph 状态机（understand → plan → act → reflect）
 tools/          P2：检索能力的 function calling schema
 eval/           P1：评测集、指标、消融脚本
