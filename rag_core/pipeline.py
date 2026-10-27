@@ -135,6 +135,7 @@ class RecipeRAG:
                         token_budget=cfg.context.token_budget,
                         per_doc_budget=cfg.context.per_doc_budget,
                         min_doc_tokens=cfg.context.min_doc_tokens,
+                        on_overflow=cfg.context.on_overflow,
                     ),
                 )
             except Exception as exc:  # 没有 key 时不该阻断检索侧实验

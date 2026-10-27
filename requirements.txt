@@ -1,4 +1,4 @@
-# 检索底座的核心依赖（不装 torch 也能跑：BM25 + Milvus 过滤 + 直方图评估）
+# 检索底座的核心依赖（不装 torch 也能跑：BM25 稀疏检索 + 过滤下推 + 数据侧自检）
 numpy>=1.26,<3
 PyYAML>=6.0
 pymilvus>=2.5.0,<2.6          # 与 docker-compose.milvus.yml 的 milvus v2.5.14 对齐

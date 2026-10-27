@@ -159,20 +159,17 @@ def check_filter(rag: RecipeRAG, filter_mode: str) -> List[Dict[str, object]]:
 
 
 def check_context(rag: RecipeRAG, probes: Sequence[str]) -> None:
-    print("\n== 5. 上下文组装（文档内截断）")
-    cfg = ContextConfig(
-        token_budget=rag.cfg.context.token_budget,
-        per_doc_budget=rag.cfg.context.per_doc_budget,
-        min_doc_tokens=rag.cfg.context.min_doc_tokens,
-    )
-    rows = []
-    for dish in probes[:4]:
-        result = rag.retrieve(PROBE_TEMPLATES[1].format(dish=dish))
-        built = build_context(result.parents, cfg)
-        rows.append((dish, built.tokens, len(built.used), built.truncated_docs,
-                     built.dropped_docs))
-        print(f"   {dish:<10} tokens={built.tokens:<5} 入选 {len(built.used)} 篇 "
-              f"截断 {built.truncated_docs} 篇 丢弃 {built.dropped_docs} 篇")
+    print("\n== 5. 上下文组装（预算 1200 / 单篇 900，才看得出 drop 与 truncate 的差别）")
+    # 用配置预算时菜谱普遍装得下，两种策略结果一样；压紧预算才能暴露上游 break 的代价
+    base = dict(token_budget=1200, per_doc_budget=900, min_doc_tokens=rag.cfg.context.min_doc_tokens)
+    print(f"   {'模式':<9}{'菜谱':<11}{'tokens':>7}{'入选':>5}{'截断':>5}{'丢弃':>5}")
+    for mode in ("truncate", "drop"):
+        cfg = ContextConfig(on_overflow=mode, **base)
+        for dish in probes[:4]:
+            result = rag.retrieve(PROBE_TEMPLATES[1].format(dish=dish))
+            built = build_context(result.parents, cfg)
+            print(f"   {mode:<10}{dish:<12}{built.tokens:>7}{len(built.used):>6} "
+                  f"{built.truncated_docs:>6}{built.dropped_docs:>6}")
 
 
 # --------------------------------------------------------------------------- main
@@ -250,7 +247,7 @@ def main() -> int:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"\n报告已写入 {path}")
     print("指标口径：gold 由语料派生（查询里的菜名），因此它是**机制自检**而非问答质量评测；"
-          "真正的人工标注评测集见 eval/。")
+          "真正的人工标注评测集见 docs/02-design.md §7。")
     return 0
 
 

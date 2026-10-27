@@ -34,6 +34,8 @@ class ContextConfig:
     min_doc_tokens: int = 80  # 剩余预算低于这个值就不再塞新文档
     separator: str = "\n\n---\n\n"
     with_header: bool = True
+    # truncate=文档内截断（默认）| drop=超预算即停，后面几篇一起丢（复现上游 break）
+    on_overflow: str = "truncate"
 
 
 @dataclass
@@ -68,6 +70,8 @@ def _header(idx: int, hit: ParentHit) -> str:
 
 def build_context(parents: Sequence[ParentHit], cfg: ContextConfig | None = None) -> BuiltContext:
     cfg = cfg or ContextConfig()
+    if cfg.on_overflow not in ("truncate", "drop"):
+        raise ValueError(f"on_overflow 只支持 truncate / drop，收到 {cfg.on_overflow!r}")
     blocks: List[str] = []
     used: List[ParentHit] = []
     truncated = 0
@@ -76,13 +80,16 @@ def build_context(parents: Sequence[ParentHit], cfg: ContextConfig | None = None
     for hit in parents:
         if remaining < cfg.min_doc_tokens:
             break
-        budget = min(cfg.per_doc_budget, remaining)
+        # drop 模式只受总预算约束（上游只比 max_length，没有单篇上限）
+        budget = remaining if cfg.on_overflow == "drop" else min(cfg.per_doc_budget, remaining)
         body = hit.recipe.text
         body_tokens = estimate_tokens(body)
         header = _header(len(used) + 1, hit) if cfg.with_header else ""
         header_tokens = estimate_tokens(header) + 1  # 换行
 
         if body_tokens > budget - header_tokens:
+            if cfg.on_overflow == "drop":
+                break  # 上游行为：这一篇放不下，后面几篇也不再尝试
             body = truncate_to_tokens(body, max(budget - header_tokens, 1))
             truncated += 1
         block = f"{header}\n{body.strip()}"

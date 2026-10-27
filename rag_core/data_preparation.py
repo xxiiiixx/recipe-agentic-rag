@@ -1,6 +1,6 @@
 """语料加载与分块：C8 的父子块设计，重写为确定性、可过滤、可缓存的实现。
 
-与上游 ``code/C8/rag_modules/data_preparation.py`` 的差异（逐条对应 docs/01-design.md 的缺陷表）：
+与上游 ``code/C8/rag_modules/data_preparation.py`` 的差异（逐条对应 docs/01-vs-c8.md 的缺陷表）：
 
 | 上游问题 | 上游位置 | 本实现 |
 | --- | --- | --- |

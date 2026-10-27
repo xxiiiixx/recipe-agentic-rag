@@ -34,6 +34,22 @@ def _expand_env(value: Any) -> Any:
     return value
 
 
+def _load_dotenv(path: str | Path = ".env") -> None:
+    """把 .env 读进 os.environ（已存在的环境变量优先，不覆盖）。
+
+    只支持 ``KEY=VALUE`` 与 ``#`` 注释，够用且不引入 python-dotenv 依赖。
+    """
+    p = Path(path)
+    if not p.is_file():
+        return
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
 def _fill(obj: Any, data: Dict[str, Any]) -> Any:
     """把 dict 填进 dataclass，未知键直接报错（拼错的配置项必须立刻暴露）。"""
     known = {f.name: f for f in fields(obj)}
@@ -102,6 +118,7 @@ class ContextCfg:
     token_budget: int = 1800
     per_doc_budget: int = 900
     min_doc_tokens: int = 80
+    on_overflow: str = "truncate"  # truncate=文档内截断 | drop=超预算即停（复现上游 break）
 
 
 @dataclass
@@ -132,6 +149,7 @@ class AppConfig:
     def from_yaml(cls, path: str | Path) -> "AppConfig":
         import yaml  # 只有读配置需要它
 
+        _load_dotenv()
         raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
         raw = _expand_env(raw)
         cfg = cls(name=raw.pop("name", Path(path).stem), workspace=raw.pop("workspace", "artifacts"),
@@ -162,5 +180,6 @@ class AppConfig:
             "context": {
                 "token_budget": self.context.token_budget,
                 "per_doc_budget": self.context.per_doc_budget,
+                "on_overflow": self.context.on_overflow,
             },
         }

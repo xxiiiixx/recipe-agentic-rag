@@ -38,7 +38,7 @@ docker compose -f docker-compose.milvus.yml up -d       # milvus v2.5.14
 curl -f http://localhost:9091/healthz
 
 pip install -r requirements.txt
-cp .env.example .env        # 填 LLM_API_KEY / EMBEDDING_API_KEY
+cp .env.example .env        # 填 LLM_API_KEY / EMBEDDING_API_KEY，建库时自动读取
 
 python -m rag_core.cli build  --config configs/base.yaml
 python -m rag_core.cli search "简单的素菜，10 分钟能做好" --max-difficulty 2
@@ -59,6 +59,7 @@ python scripts/selfcheck.py --config configs/base.yaml  # 五项自检 + 落盘�
 | 语料洁净度 | 322 篇全为真菜谱，`template/示例菜` 已在取数时删除 |
 | 分词（gold=菜名） | `char_bigram` 命中 92% Hit@1；`whitespace`（上游）0% |
 | 过滤下推 | `pre` 合规率 100% / 平均候选 164；`post` 合规率 40% / 候选 1701 |
+| 上下文溢出 | 预算 1200 时 `truncate` 留 2 篇（1190 tokens）；`drop`（上游）只留 1 篇、丢 1 篇 |
 
 dense 臂数字要在服务器上换真 embedding 才有意义，届时替换上表。
 
@@ -76,14 +77,16 @@ docs/           01 与原项目的区别 · 02 设计（含 P1/P2 契约） · 0
 
 ## 消融矩阵
 
-| 组 | 变量 | 臂 |
+| 组 | 配置项 | 臂 |
 |---|---|---|
-| A | 分词器 | `whitespace`（上游）/ `char_bigram` / `jieba` |
-| B | 检索臂 | `dense` / `sparse` / 双路 |
-| C | 过滤时机 | `pre`（下推）/ `post`（上游） |
-| D | 父块排序 | `hit_count`（上游）/ `rrf_sum` / `max_score` |
-| E | RRF 常数 | 10 / 30 / 60 / 100 |
-| F | 上下文策略 | 整篇 break / 文档级截断 |
+| A | `retrieval.tokenizer` | `whitespace`（上游）/ `char_bigram` / `jieba` |
+| B | `retrieval.arms` | `dense` / `sparse` / 双路 |
+| C | `retrieval.filter_mode` | `pre`（下推）/ `post`（上游） |
+| D | `retrieval.parent_strategy` | `hit_count`（上游）/ `rrf_sum` / `max_score` |
+| E | `retrieval.rrf_k` | 10 / 30 / 60 / 100 |
+| F | `context.on_overflow` | `drop`（上游整篇丢弃）/ `truncate`（文档内截断） |
+
+每行只改一个 YAML 字段，这就是"一次实验一份配置"的具体落法。
 
 指标：Recall@k、MRR、nDCG@10、候选存活率、Faithfulness、Citation Precision，附 tokens/query 与 p50/p95 延迟。口径与报告格式见 [docs/02-design.md](docs/02-design.md) §7。
 

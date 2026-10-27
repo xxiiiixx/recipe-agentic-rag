@@ -7,7 +7,7 @@ workspace: artifacts
 seed: 42
 
 dataset:
-  # 指向 all-in-rag 仓库的 data/C8/cook（本仓库不内置语料，取数方式见 README）
+  # 语料随仓库提供（322 篇，来源与清洗见 data/README.md）
   root: data/C8/cook
   max_level: 3                 # 按 #/##/### 切分
   drop_comments: true          # 剥离 <!-- 贡献者说明 -->
@@ -49,6 +49,7 @@ context:
   token_budget: 1800           # 每次问答给模型的上下文预算
   per_doc_budget: 900          # 单篇菜谱最多占多少
   min_doc_tokens: 80           # 剩余预算低于此值不再塞新文档
+  on_overflow: truncate        # truncate=文档内截断 | drop=超预算即停（复现上游整篇丢弃）
 
 llm:
   model: moonshot-v1-8k        # 填 mock/none 则跳过生成，只做检索实验

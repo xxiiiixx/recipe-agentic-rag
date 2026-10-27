@@ -25,7 +25,7 @@ eval/       P1：只读 trace，不改检索
 | `embeddings.py` | 三种 embedding 后端 | `sentence_transformers` / `openai_compatible` / `hashing`(冒烟) |
 | `vector_store.py` | 向量后端（`MilvusVectorStore` / `LocalVectorStore`） | 同一接口 + 同一 `SearchFilter`，差异只在"谁执行过滤" |
 | `retrieval.py` | 双路召回 + RRF 融合 + 父块回填 + trace | 融合身份是 `chunk_id`；分数只存在于返回对象 |
-| `context.py` | 上下文组装 | 文档级截断，不整篇丢弃 |
+| `context.py` | 上下文组装 | 默认文档级截断；`on_overflow: drop` 复现上游整篇丢弃，用于消融 |
 | `llm.py` | Chat 客户端 | 任意 OpenAI 兼容端点，重试与 usage 记录 |
 | `generation.py` | 提示词 + 引用标注 + `citation_precision` | 只用参考菜谱、标 `[n]`、没写就说未提及 |
 | `config.py` | YAML → dataclass，`${ENV}` 展开 | 未知键直接报错，配置写错不静默 |
