@@ -25,7 +25,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Protocol, Sequence, Set, Tuple
+from typing import Dict, List, Optional, Protocol, Sequence, Tuple
 
 import numpy as np
 
@@ -139,10 +139,11 @@ class LocalVectorStore:
         logger.info("本地向量库已保存：%s（%d 块，%d 维）", out, len(self._chunks), self.dim)
 
     @classmethod
-    def load(cls, in_dir: str | Path, dim: int) -> "LocalVectorStore":
+    def load(cls, in_dir: str | Path, dim: int | None = None) -> "LocalVectorStore":
         src = Path(in_dir)
-        store = cls(dim)
+        store = cls(dim or 0)
         store._matrix = np.load(src / "vectors.npy")
+        store.dim = int(store._matrix.shape[1]) if store._matrix.ndim == 2 else (dim or 0)
         store._chunks = [
             Chunk.from_dict(json.loads(line))
             for line in (src / "chunks.jsonl").read_text(encoding="utf-8").splitlines()
@@ -305,6 +306,9 @@ class MilvusVectorStore:
     def count(self) -> int:
         stats = self.client.get_collection_stats(self.collection)
         return int(stats.get("row_count", 0))
+
+    def exists(self) -> bool:
+        return bool(self.client.has_collection(self.collection))
 
     def drop(self) -> None:
         if self.client.has_collection(self.collection):

@@ -14,7 +14,7 @@ import os
 import re
 from dataclasses import dataclass, field, fields, is_dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -92,9 +92,10 @@ class StoreCfg:
     token: str = "${MILVUS_TOKEN}"
     collection: str = "recipe_chunks"
     metric: str = "COSINE"
-    dim: int = 0  # 0 表示跟随 embedding.dim；与已有 collection 维度不一致会自动重建
+    dim: int = 0  # 0 表示跟随 embedding.dim；换维度时需换 collection 或 recreate
     recreate: bool = False
-    local_dir: str = "artifacts/local_index"
+    # 留空表示 artifacts/<name>/local_index，保证不同实验的索引互不覆盖
+    local_dir: str = ""
 
 
 @dataclass
@@ -156,9 +157,15 @@ class AppConfig:
                   seed=raw.pop("seed", 42))
         return _fill(cfg, raw)
 
+    def effective_local_dir(self) -> Path:
+        """本地索引目录：显式配置优先，否则按实验名隔离。"""
+        if self.store.local_dir:
+            return Path(self.store.local_dir)
+        return Path(self.workspace) / self.name / "local_index"
+
     def artifacts_dir(self) -> Path:
         if is_dataclass(self.store) and self.store.backend == "local":
-            return Path(self.store.local_dir)
+            return self.effective_local_dir()
         return Path(self.workspace) / self.name
 
     def describe(self) -> Dict[str, Any]:
