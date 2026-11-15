@@ -1,0 +1,33 @@
+# 服务器配置：bge-m3 本地向量 + Milvus；推理走魔搭（OpenAI 兼容）。
+# 用法：python -m rag_core.cli --config configs/server.yaml build
+# 模型 ID 在 D1 冻结后写进 .env 的 LLM_MODEL，不写进仓库。
+name: server
+workspace: artifacts
+seed: 42
+
+dataset:
+  root: data/C8/cook
+
+embedding:
+  provider: sentence_transformers
+  model: BAAI/bge-m3
+  dim: 1024
+  batch_size: 32
+
+store:
+  backend: milvus
+  uri: http://localhost:19530
+  token: ${MILVUS_TOKEN}
+  collection: recipe_chunks_m3
+  metric: COSINE
+  recreate: false
+
+llm:
+  # 魔搭 OpenAI 兼容端点；变量未设置时为空，ask 会提示未配置 LLM
+  model: ${LLM_MODEL}
+  base_url: ${LLM_BASE_URL}
+  api_key: ${LLM_API_KEY}
+  temperature: 0.1
+  max_tokens: 1024
+  timeout: 60.0
+  max_retries: 2

@@ -19,6 +19,7 @@ from typing import List, Optional
 
 from .config import AppConfig
 from .data_preparation import CATEGORY_MAPPING
+from .pipeline import RecipeRAG
 from .schema import SearchFilter
 
 logger = logging.getLogger("rag_core.cli")
@@ -72,13 +73,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="rag_core", description="菜谱 Agentic RAG 检索底座")
     parser.add_argument("--config", default="configs/base.yaml")
     parser.add_argument("--log-level", default="INFO")
+    # 子命令也接受这两个全局项：README 里的 `build --config ...` 写法必须可用。
+    # 用 SUPPRESS 作默认值，子命令没写时不会覆盖它在子命令前出现的值。
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--config", default=argparse.SUPPRESS)
+    common.add_argument("--log-level", default=argparse.SUPPRESS)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    p_build = sub.add_parser("build", help="建索引并落盘数据集")
+    p_build = sub.add_parser("build", parents=[common], help="建索引并落盘数据集")
     p_build.add_argument("--skip-embedding", action="store_true", help="只切块与建 BM25，不调向量模型")
 
     for name, helper in (("search", "仅检索"), ("ask", "检索 + 生成")):
-        p = sub.add_parser(name, help=helper)
+        p = sub.add_parser(name, parents=[common], help=helper)
         p.add_argument("query")
         p.add_argument("--top-k", type=int, default=None)
         p.add_argument("--category", nargs="*", default=None, help="中文类目或目录名，或菜名")
@@ -87,7 +93,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         p.add_argument("--arms", nargs="*", default=None, choices=["dense", "sparse"])
         p.add_argument("--json", action="store_true")
 
-    sub.add_parser("stats", help="打印语料与索引统计")
+    sub.add_parser("stats", parents=[common], help="打印语料与索引统计")
 
     args = parser.parse_args(argv)
     logging.basicConfig(
@@ -98,20 +104,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     cfg = AppConfig.from_yaml(args.config)
 
     if args.cmd == "build":
-        from .pipeline import RecipeRAG
-
         rag = RecipeRAG.build(cfg, skip_embedding=args.skip_embedding)
         print(f"建库完成：{rag.dataset.stats()}")
         return 0
 
     if args.cmd == "stats":
-        rag = RecipeRAG.load_local(cfg) if cfg.store.backend == "local" else RecipeRAG.build(cfg, skip_embedding=True)
+        rag = RecipeRAG.load(cfg, skip_embedding=True)
         print(json.dumps(rag.info(), ensure_ascii=False, indent=2))
         return 0
 
-    from .pipeline import RecipeRAG
-
-    rag = RecipeRAG.build(cfg)
+    # search / ask 复用已建索引，不再每次全量重算 embedding 与 upsert。
+    rag = RecipeRAG.load(cfg)
     flt = build_filter(args.category, args.max_difficulty, args.min_difficulty)
     if not flt.is_empty() and args.cmd == "search":
         logger.info("过滤条件：%s", flt.describe())
