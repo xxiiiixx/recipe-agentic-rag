@@ -1,108 +1,64 @@
 # recipe-agentic-rag
 
-把 [all-in-rag](https://github.com/datawhalechina/all-in-rag) 第 8 章（C8）的食谱 RAG 重写成**可消融的检索底座**，再在其上叠一层带检索规划与工具调用的 Agentic RAG。
+把 [all-in-rag](https://github.com/datawhalechina/all-in-rag) 第 8 章的食谱 RAG 重写成**可消融的检索底座**，再在其上叠加带检索规划与工具调用的 Agentic RAG。
 
-底座沿用 C8 的父子块 + 混合检索；重写的是决定性 ID、可下推的过滤、可切换的检索臂，外加一套离线评估与 trace。
+## 核心结论
 
-## 与原项目的区别
+| 结论 | 数字 |
+|---|---|
+| 上游“混合检索”实际是纯向量 | 修好分词后，稀疏臂 Hit@1 0% → 83%；`char_bigram` 92% |
+| 过滤下推 | 候选 1701 → 164，约束查询合规率 40% → 100% |
+| 确定性索引 | 322 篇 → 1701 块，两次建库 `chunk_id` 完全一致 |
 
-上游 C8 把流程串通了，但实现细节会让实验结论失真。这里只说三件最要紧的，**十条逐项对照见 [docs/01-vs-c8.md](docs/01-vs-c8.md)**：
-
-- **所谓混合检索其实是纯向量检索**。上游 `BM25Retriever` 用 langchain 默认的 `text.split()` 分词，中文没空格，稀疏路实测命中率 0%。修成 `char_bigram` 后稀疏单臂 83% Hit@1，反超向量臂的 67%。
-- **`chunk_id` 是 `uuid4()`，两次建库全变**，评测集只能退化到父文档粒度，父子块白做。本仓库用 `md5(parent_id ‖ 章节路径 ‖ 序号)`，索引可复现到块。
-- **过滤发生在检索之后**（先取 `top_k*3` 再筛），条件越严召回越漏。改为过滤下推后，同一查询从「候选 1701 / 合规 40%」变成「候选 164 / 合规 100%」。
-
-另外七处（融合身份用内容哈希会合并同名小节、分数写回共享 `metadata` 造成跨查询污染、按字符 `break` 整篇丢父文档、父块回填只数命中块个数、模板被 `rglob` 吃进索引、`FAISS` 进程内索引每次重建、LLM 与路径写死在代码里）均在 `01-vs-c8.md` 里给了位置、改法和依据。
+数字来自 `scripts/selfcheck.py`（hashing 向量 + local 后端，只验证机制）。真实 dense 指标在 P1 补齐。
 
 ## 架构
 
-```mermaid
-flowchart LR
-    A[data/C8/cook<br/>322 篇菜谱] --> B[确定性切分]
-    B --> C[Embedding] --> D[(Milvus<br/>向量 + INVERTED 索引)]
-    B --> E[BM25<br/>可切换分词]
-    F[SearchFilter] -->|下推| D
-    F -->|候选集| E
-    D --> G[RRF 融合]
-    E --> G
-    G --> H[父块回填] --> I[预算内截断] --> J[带引用生成]
+```text
+Markdown → 按章节切块 → Milvus 向量 + BM25 → RRF 融合 → 父块回填 → 预算内截断 → 带引用生成
 ```
 
-`rag_core/` 不知道 Agent 存在；Agent 只能经工具 schema 调它；评估只读 trace。分层与接口承诺见 [docs/02-design.md](docs/02-design.md)。
+`rag_core/` 不知道 Agent 存在；Agent 只能经工具 schema 调用它；评估只读 trace。
 
 ## 快速开始
 
 ```bash
-# 语料已随仓库提供：data/C8/cook 共 322 篇（来源、清洗与噪声见 data/README.md）
-docker compose -f docker-compose.milvus.yml up -d       # milvus v2.5.14
+docker compose -f docker-compose.milvus.yml up -d
 curl -f http://localhost:9091/healthz
-
 pip install -r requirements.txt
-cp .env.example .env        # 填 LLM_API_KEY / EMBEDDING_API_KEY，建库时自动读取
-
-python -m rag_core.cli build  --config configs/base.yaml
-python -m rag_core.cli search "简单的素菜，10 分钟能做好" --max-difficulty 2
-python -m rag_core.cli search "红烧肉要炖多久" --arms sparse   # 只跑稀疏臂
-python -m rag_core.cli ask    "红烧肉要炖多久" --json
-
-python scripts/selfcheck.py --config configs/base.yaml  # 五项自检 + 落盘报告
+pip install -r requirements-embedding.txt
+cp .env.example .env          # 填 LLM_API_KEY（ask 需要）
+python -m rag_core.cli --config configs/server.yaml build
+python -m rag_core.cli --config configs/server.yaml search "红烧肉要炖多久"
+python scripts/selfcheck.py --root data/C8/cook --backend local --embedding hashing --dim 256
 ```
 
-无 GPU：`embedding.provider` 换 `openai_compatible`；无 Docker：`store.backend` 换 `local`。
-逐步验收与排错见 [docs/03-runbook.md](docs/03-runbook.md)。
-
-### 自检输出（本地 hashing 向量，只验证机制）
-
-| 检查 | 结果 |
-|---|---|
-| 索引确定性 | 两次切块 `chunk_id` / `parent_id` 逐条一致，1701 块无重复 |
-| 语料洁净度 | 322 篇全为真菜谱，`template/示例菜` 已在取数时删除 |
-| 分词（gold=菜名） | `char_bigram` 命中 92% Hit@1；`whitespace`（上游）0% |
-| 过滤下推 | `pre` 合规率 100% / 平均候选 164；`post` 合规率 40% / 候选 1701 |
-| 上下文溢出 | 预算 1200 时 `truncate` 留 2 篇（1190 tokens）；`drop`（上游）只留 1 篇、丢 1 篇 |
-
-dense 臂数字要在服务器上换真 embedding 才有意义，届时替换上表。
+无 Docker 用 `store.backend: local`；无 GPU 用云端 embedding。CUDA 机器按 [docs/runbook.md](docs/runbook.md) 的 cu126 命令装 torch。
 
 ## 目录
 
+```text
+rag_core/    检索底座：切分 / 索引 / 双路召回 / RRF / 上下文 / 生成
+data/C8/     322 篇中文菜谱
+configs/     一份 YAML = 一次实验；server.yaml 继承 base.yaml
+scripts/     selfcheck / 模型探针
+tests/       契约测试
+docs/        与上游差异 / 设计 / 跑通手册
 ```
-rag_core/       检索底座（14 模块）：切分 / 索引 / 双路召回 / RRF / 上下文 / 生成
-data/C8/cook/   语料：322 篇菜谱（来源与清洗说明见 data/README.md）
-scripts/        自检脚本：确定性 / 分词 / 检索臂 / 过滤下推 / 上下文
-configs/        一份 YAML = 一次实验
-docs/           01 与原项目的区别 · 02 设计（含 P1/P2 契约） · 03 跑通手册
-```
 
-`agent/`、`tools/`、`eval/` 的契约与评估协议已写在 [docs/02-design.md](docs/02-design.md) §5–§7，代码在 P1/P2 落地时新建。
+## 文档
 
-## 消融矩阵
-
-| 组 | 配置项 | 臂 |
-|---|---|---|
-| A | `retrieval.tokenizer` | `whitespace`（上游）/ `char_bigram` / `jieba` |
-| B | `retrieval.arms` | `dense` / `sparse` / 双路 |
-| C | `retrieval.filter_mode` | `pre`（下推）/ `post`（上游） |
-| D | `retrieval.parent_strategy` | `hit_count`（上游）/ `rrf_sum` / `max_score` |
-| E | `retrieval.rrf_k` | 10 / 30 / 60 / 100 |
-| F | `context.on_overflow` | `drop`（上游整篇丢弃）/ `truncate`（文档内截断） |
-
-每行只改一个 YAML 字段，这就是"一次实验一份配置"的具体落法。
-
-指标：Recall@k、MRR、nDCG@10、候选存活率、Faithfulness、Citation Precision，附 tokens/query 与 p50/p95 延迟。口径与报告格式见 [docs/02-design.md](docs/02-design.md) §7。
+- [设计与评测协议](docs/design.md)
+- [跑通与排错](docs/runbook.md)
 
 ## 路线图
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
-| P0 | 检索底座重构、确定性 ID、过滤下推、可切换臂、CLI | ✅ |
-| P1 | 评测集（100 条）+ 指标脚本 + 六组消融报告 | ⬜ |
-| P2 | LangGraph 状态机、检索工具化、反思与重试 | ⬜ |
-| P3 | 自适应检索深度（按查询类型定 k） | ⬜ |
-| P4 | 重排序 + 父子块粒度对比 | ⬜ |
-| P5 | trace 与 badcase 归因 | ⬜ |
+| P0 | 检索底座、确定性 ID、过滤下推、可切换臂 | ✅ |
+| P1 | 105 条评测集 + 六组消融 | 进行中 |
+| P2 | 工具层 + LangGraph 状态机 + 反思 | 计划 |
+| P3 | 规则版自适应检索深度 | 计划 |
+| P5 | trace 与 badcase 归因 | 计划 |
 
-## 范围
-
-不做多模态菜谱图、不做 GraphRAG（C9 已有）、不做 Web 产品——都会稀释"算法实验"这条主线。
-
-语料与原始实现来自 [datawhalechina/all-in-rag](https://github.com/datawhalechina/all-in-rag)（MIT）。缺陷记录均为阅读源码所得。
+P4 重排不做：组件成熟、对 T4 收益低。

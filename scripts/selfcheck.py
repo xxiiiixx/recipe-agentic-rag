@@ -247,7 +247,7 @@ def main() -> int:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"\n报告已写入 {path}")
     print("指标口径：gold 由语料派生（查询里的菜名），因此它是**机制自检**而非问答质量评测；"
-          "真正的人工标注评测集见 docs/02-design.md §7。")
+          "真正的人工标注评测集见 docs/design.md §6。")
     return 0
 
 
