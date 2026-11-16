@@ -12,6 +12,9 @@ artifacts/
 *.db
 *.sqlite3
 
+# Docker 运行时数据（Milvus / etcd / MinIO）
+volumes/
+
 # 语料随仓库提供（322 篇，1.5 MB）；本地新增的临时数据目录仍忽略
 data/tmp/
 
