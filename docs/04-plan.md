@@ -10,7 +10,7 @@
 | 投入 | 25–30 h/周；60% 项目 / 25% 算法题与八股 / 15% 投递复盘 |
 | 服务器 | Tesla T4 15GB，Driver 580.178.04，CUDA 13.0，仓库 `/workspace` |
 | 环境 | conda `recipe-rag`，Python 3.12；torch 2.9.1 + cu126；sentence-transformers 6.3.0 |
-| 模型 | 推理走魔搭 API（原生 function calling）；主模型 `Qwen/Qwen3.5-122B-A10B`，快速备用 `deepseek-ai/DeepSeek-V4.1-Flash-1017`；embedding 本地 `BAAI/bge-m3`（1024 维） |
+| 模型 | 推理走魔搭 API（原生 function calling）；主模型 `deepseek-ai/DeepSeek-V4.1-Flash-1017`，质量备用 `Qwen/Qwen3.5-122B-A10B`；embedding 本地 `BAAI/bge-m3`（1024 维） |
 | 主线 | 同一评测集上，先量化 RAG 底座变量，再量化 Agent 决策层相对静态 RAG 的增量与代价 |
 | 统计 | 检索确定性单次 + 105 条 query 的 1000 次 bootstrap 95% CI；Agent 3 次中位数 |
 | 执行 | 本地改代码 → 推分支 → 服务器 `git pull` → `scripts/run_matrix.py` → 结果推回 `results/` |
@@ -41,8 +41,7 @@ docker compose -f docker-compose.milvus.yml up -d
 curl -f http://localhost:9091/healthz
 find data/C8/cook -name '*.md' | wc -l     # 322
 python scripts/selfcheck.py --root data/C8/cook --backend local --embedding hashing --dim 256
-conda env export --from-history > environment.yml
-pip freeze > requirements-lock.txt
+conda env export --no-builds | grep -v '^prefix:' > environment.yml
 ```
 
 模型选型在 D1 当天冻结：从魔搭控制台取 3 个支持 OpenAI 兼容 chat + function calling 的模型，用 `scripts/probe_models.py` 各跑 10 次 `search_recipes` 工具探针；合法调用 ≥9/10 且无持续 429 的候选里选最便宜的，备用模型写进 `.env` 注释。模型 ID 记入 `configs/server.yaml`，整月不换。
@@ -53,7 +52,7 @@ pip freeze > requirements-lock.txt
 
 | 日 | 日期 | 任务 | 产出 |
 |---|---|---|---|
-| D1 | 11-16 一 | conda 环境、torch/CUDA、Milvus、hashing 自检、模型选型 | 环境就绪；`environment.yml`、`requirements-lock.txt` |
+| D1 | 11-16 一 | conda 环境、torch/CUDA、Milvus、hashing 自检、模型选型 | 环境就绪；`environment.yml` |
 | D2 | 11-17 二 | 修 P0：`stats` 崩溃、`--config` 位置、查询复用索引、local 索引隔离；补契约测试 | 可运行 `main`，tag `p0.1` |
 | D3 | 11-18 三 | `${ENV}` 覆盖；`scripts/run_matrix.py` 骨架；3 组配置 smoke | runner 可跳跑、可续跑 |
 | D4 | 11-19 四 | 评测集生成脚本 + LLM 造 120 条候选 | `eval/queries.candidates.jsonl` |

@@ -52,6 +52,38 @@ def _load_dotenv(path: str | Path = ".env") -> None:
         os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
+def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """子配置覆盖父配置：字典递归合并，列表与标量整体替换。"""
+    merged = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _load_yaml_with_extends(path: Path, seen: set[Path] | None = None) -> Dict[str, Any]:
+    import yaml
+
+    resolved = path.resolve()
+    seen = set() if seen is None else seen
+    if resolved in seen:
+        raise ValueError(f"配置 extends 形成循环：{resolved}")
+    seen.add(resolved)
+
+    raw = yaml.safe_load(resolved.read_text(encoding="utf-8")) or {}
+    parent_ref = raw.pop("extends", None)
+    if parent_ref is None:
+        return raw
+    if not isinstance(parent_ref, str):
+        raise ValueError(f"{resolved} 的 extends 必须是字符串路径")
+    parent_path = Path(parent_ref)
+    if not parent_path.is_absolute():
+        parent_path = resolved.parent / parent_path
+    return _deep_merge(_load_yaml_with_extends(parent_path, seen), raw)
+
+
 def _fill(obj: Any, data: Dict[str, Any]) -> Any:
     """把 dict 填进 dataclass，未知键直接报错（拼错的配置项必须立刻暴露）。"""
     known = {f.name: f for f in fields(obj)}
@@ -153,9 +185,15 @@ class AppConfig:
         import yaml  # 只有读配置需要它
 
         _load_dotenv()
-        raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
-        raw = _expand_env(raw)
-        cfg = cls(name=raw.pop("name", Path(path).stem), workspace=raw.pop("workspace", "artifacts"),
+        cfg_path = Path(path)
+        # 子配置没写 name 时用文件名，而不是继承父配置的 name
+        child = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+        explicit_name = child.get("name")
+        raw = _expand_env(_load_yaml_with_extends(cfg_path))
+        name = raw.pop("name", cfg_path.stem)
+        if explicit_name is None:
+            name = cfg_path.stem
+        cfg = cls(name=name, workspace=raw.pop("workspace", "artifacts"),
                   seed=raw.pop("seed", 42))
         return _fill(cfg, raw)
 

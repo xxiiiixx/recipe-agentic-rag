@@ -194,6 +194,47 @@ def test_env_expansion_uses_default_for_missing_or_empty(monkeypatch) -> None:
     assert _expand_env("${RAG_TEST_MISSING:-fallback}") == "fallback"
 
 
+def test_config_extends_merges_and_overrides(tmp_path) -> None:
+    base = tmp_path / "base.yaml"
+    base.write_text(
+        "name: base\n"
+        "retrieval:\n  top_k: 5\n  tokenizer: char_bigram\n"
+        "context:\n  token_budget: 100\n",
+        encoding="utf-8",
+    )
+    child = tmp_path / "child.yaml"
+    child.write_text(
+        "extends: base.yaml\n"
+        "name: child\n"
+        "retrieval:\n  top_k: 3\n",
+        encoding="utf-8",
+    )
+    cfg = AppConfig.from_yaml(child)
+    assert cfg.name == "child"
+    assert cfg.retrieval.top_k == 3
+    assert cfg.retrieval.tokenizer == "char_bigram"
+    assert cfg.context.token_budget == 100
+
+
+def test_config_extends_defaults_name_to_child_file(tmp_path) -> None:
+    base = tmp_path / "base.yaml"
+    base.write_text("name: base\nretrieval:\n  top_k: 5\n", encoding="utf-8")
+    child = tmp_path / "ablation-rrf.yaml"
+    child.write_text("extends: base.yaml\nretrieval:\n  rrf_k: 10\n", encoding="utf-8")
+    cfg = AppConfig.from_yaml(child)
+    assert cfg.name == "ablation-rrf"
+    assert cfg.retrieval.top_k == 5
+
+
+def test_config_extends_detects_cycle(tmp_path) -> None:
+    a = tmp_path / "a.yaml"
+    b = tmp_path / "b.yaml"
+    a.write_text("extends: b.yaml\n", encoding="utf-8")
+    b.write_text("extends: a.yaml\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="循环"):
+        AppConfig.from_yaml(a)
+
+
 def test_build_filter_maps_category_and_dish() -> None:
     flt = build_filter(["素菜", "meat_dish", "不存在的菜"], max_difficulty=2)
     assert flt.categories == ["素菜"]
