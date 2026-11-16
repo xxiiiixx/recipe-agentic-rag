@@ -45,7 +45,7 @@ conda env export --from-history > environment.yml
 pip freeze > requirements-lock.txt
 ```
 
-模型选型在 D1 当天冻结：从魔搭控制台取 3 个支持 OpenAI 兼容 chat + function calling 的模型，各跑 10 次 `search_recipes` 工具探针；合法调用 ≥9/10 且无持续 429 的候选里选最便宜的，备用模型写进 `.env` 注释。模型 ID 记入 `configs/server.yaml`，整月不换。
+模型选型在 D1 当天冻结：从魔搭控制台取 3 个支持 OpenAI 兼容 chat + function calling 的模型，用 `scripts/probe_models.py` 各跑 10 次 `search_recipes` 工具探针；合法调用 ≥9/10 且无持续 429 的候选里选最便宜的，备用模型写进 `.env` 注释。模型 ID 记入 `configs/server.yaml`，整月不换。
 
 ## 2. 逐日日历
 
