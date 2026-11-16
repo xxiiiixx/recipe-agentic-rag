@@ -23,9 +23,9 @@ store:
   recreate: false
 
 llm:
-  # 魔搭 OpenAI 兼容端点；变量未设置时为空，ask 会提示未配置 LLM
-  model: ${LLM_MODEL}
-  base_url: ${LLM_BASE_URL}
+  # 魔搭 OpenAI 兼容端点；D1 探针冻结的主模型，可用 .env 覆盖
+  model: ${LLM_MODEL:-Qwen/Qwen3.5-122B-A10B}
+  base_url: ${LLM_BASE_URL:-https://api-inference.modelscope.cn/v1}
   api_key: ${LLM_API_KEY}
   temperature: 0.1
   max_tokens: 1024

@@ -24,7 +24,9 @@ _ENV_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
 def _expand_env(value: Any) -> Any:
     if isinstance(value, str):
         def repl(m: "re.Match[str]") -> str:
-            return os.environ.get(m.group(1), m.group(2) or "")
+            # 与 shell 的 ${VAR:-default} 一致：未设置或空值都取默认值
+            current = os.environ.get(m.group(1))
+            return current if current else (m.group(2) or "")
 
         return _ENV_RE.sub(repl, value)
     if isinstance(value, dict):

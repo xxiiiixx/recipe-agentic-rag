@@ -182,6 +182,18 @@ def test_config_rejects_unknown_keys(tmp_path) -> None:
         AppConfig.from_yaml(path)
 
 
+def test_env_expansion_uses_default_for_missing_or_empty(monkeypatch) -> None:
+    from rag_core.config import _expand_env
+
+    monkeypatch.setenv("RAG_TEST_EMPTY", "")
+    monkeypatch.setenv("RAG_TEST_SET", "value")
+    monkeypatch.delenv("RAG_TEST_MISSING", raising=False)
+
+    assert _expand_env("${RAG_TEST_EMPTY:-fallback}") == "fallback"
+    assert _expand_env("${RAG_TEST_SET:-fallback}") == "value"
+    assert _expand_env("${RAG_TEST_MISSING:-fallback}") == "fallback"
+
+
 def test_build_filter_maps_category_and_dish() -> None:
     flt = build_filter(["素菜", "meat_dish", "不存在的菜"], max_difficulty=2)
     assert flt.categories == ["素菜"]

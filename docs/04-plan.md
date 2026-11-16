@@ -10,7 +10,7 @@
 | 投入 | 25–30 h/周；60% 项目 / 25% 算法题与八股 / 15% 投递复盘 |
 | 服务器 | Tesla T4 15GB，Driver 580.178.04，CUDA 13.0，仓库 `/workspace` |
 | 环境 | conda `recipe-rag`，Python 3.12；torch 2.9.1 + cu126；sentence-transformers 6.3.0 |
-| 模型 | 推理走魔搭 API（原生 function calling）；embedding 本地 `BAAI/bge-m3`（1024 维） |
+| 模型 | 推理走魔搭 API（原生 function calling）；主模型 `Qwen/Qwen3.5-122B-A10B`，快速备用 `deepseek-ai/DeepSeek-V4.1-Flash-1017`；embedding 本地 `BAAI/bge-m3`（1024 维） |
 | 主线 | 同一评测集上，先量化 RAG 底座变量，再量化 Agent 决策层相对静态 RAG 的增量与代价 |
 | 统计 | 检索确定性单次 + 105 条 query 的 1000 次 bootstrap 95% CI；Agent 3 次中位数 |
 | 执行 | 本地改代码 → 推分支 → 服务器 `git pull` → `scripts/run_matrix.py` → 结果推回 `results/` |
