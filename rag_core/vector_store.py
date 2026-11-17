@@ -250,6 +250,15 @@ class MilvusVectorStore:
         return len(rows)
 
     # ---- 检索 ----
+    def _ensure_loaded(self) -> None:
+        """Milvus Lite 在跨进程打开已有 collection 时会处于 released，检索前必须 load。"""
+        if not self.client.has_collection(self.collection):
+            return
+        try:
+            self.client.load_collection(self.collection)
+        except Exception as exc:  # 已加载或服务端不支持时不影响后续 search
+            logger.warning("collection %s load 失败：%s", self.collection, exc)
+
     def search(
         self,
         vector: np.ndarray,
@@ -257,6 +266,7 @@ class MilvusVectorStore:
         flt: Optional[SearchFilter] = None,
         mode: str = "pre",
     ) -> List[Tuple[str, float]]:
+        self._ensure_loaded()
         expr = None
         limit = top_k
         if flt is not None and not flt.is_empty():

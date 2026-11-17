@@ -24,6 +24,10 @@ data/tmp/
 !.env.example
 configs/local*.yaml
 
+# 本地 Claude Code 规则，不入库
+CLAUDE.md
+CLAUDE.local.md
+
 # 编辑器 / 系统
 .vscode/
 .idea/
