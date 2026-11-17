@@ -69,6 +69,16 @@ REFUSAL_TOPICS = (
     "菜品的精确热量与宏量营养素",
     "低温慢煮机的具体参数",
     "商用烤箱的蒸汽比例",
+    "食品添加剂的法规限量与安全评估",
+    "餐厅摆盘与装饰技巧",
+    "食材的采购渠道、品牌与价格",
+    "食物过敏原的实验室检测",
+    "特定疾病（如糖尿病肾病）的饮食处方",
+    "专业厨房设备的选购与维护参数",
+    "面团发酵曲线的仪器测量",
+    "食品微生物检测与保质期实验",
+    "专业侍酒与餐酒搭配",
+    "商用中央厨房的产能规划",
 )
 SYSTEM = "你是中文菜谱评测集的出题助手。只输出一个 JSON 对象，不要 markdown 代码块，不要解释。"
 
@@ -329,8 +339,8 @@ def main() -> int:
                 model=args.model,
                 base_url=args.base_url,
                 api_key=api_key,
-                temperature=0.7,
-                max_tokens=256,
+                temperature=0.8,
+                max_tokens=512,
                 timeout=60.0,
                 max_retries=2,
             )
