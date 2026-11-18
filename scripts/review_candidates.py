@@ -99,12 +99,14 @@ def main() -> int:
         writer.writerow(header)
         for typ, items in by_type.items():
             for row in items:
+                tops = [clean(t) for t in row["_top"]]
+                tops += [""] * (args.top_k - len(tops))
                 writer.writerow([
                     row["qid"], typ, "", "", clean(row["query"]),
                     json.dumps(row.get("filters", {}), ensure_ascii=False),
                     ";".join(row.get("gold_dishes", [])),
                     clean(row.get("expected_reason") or ""),
-                    *[clean(t) for t in row["_top"]],
+                    *tops,
                     clean(row.get("notes", "")),
                 ])
 
