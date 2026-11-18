@@ -162,6 +162,27 @@ def validate_record(
         if leaked:
             errors.append(f"{qid}: query 泄露了 gold 菜名 {leaked}")
 
+    if rec["type"] == "multi_hop":
+        subs = rec.get("subgoals")
+        if not isinstance(subs, list) or len(subs) != 2:
+            errors.append(f"{qid}: multi_hop 必须有 2 个 subgoals")
+        else:
+            if gold_ids and len(gold_ids) != len(subs):
+                errors.append(f"{qid}: gold 数量应与 subgoals 数量一致")
+            for j, sub in enumerate(subs):
+                filters = sub.get("filters") if isinstance(sub, dict) else None
+                if not isinstance(filters, dict) or not filters:
+                    errors.append(f"{qid}: subgoal[{j}] 缺少非空 filters")
+                    continue
+                try:
+                    sub_flt = SearchFilter(**filters)
+                except TypeError as exc:
+                    errors.append(f"{qid}: subgoal[{j}] filters 非法：{exc}")
+                    continue
+                recipe = by_id.get(gold_ids[j]) if j < len(gold_ids) else None
+                if recipe is not None and not sub_flt.matches(recipe_view(recipe)):
+                    errors.append(f"{qid}: subgoal[{j}] 与 gold {recipe.dish_name!r} 不匹配")
+
     return errors
 
 

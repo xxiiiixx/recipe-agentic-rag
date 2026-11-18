@@ -31,6 +31,7 @@ dev 不进报告，只用于调参和 prompt 调整。test 与 dev 按类型分�
 | `gold_parent_ids` | 稳定主键；`refusal` 为空 |
 | `gold_dishes` | 人工可读，必须与 `parent_ids` 一一对应 |
 | `expected_reason` | `refusal` 必填，写清缺什么 |
+| `subgoals` | `multi_hop` 必填，两个子目标的结构化 filters |
 | `notes` | 标注理由、限制或歧义说明 |
 
 ## gold 规则
@@ -38,12 +39,13 @@ dev 不进报告，只用于调参和 prompt 调整。test 与 dev 按类型分�
 1. **单跳**：同名菜的全部变体都进 gold。红烧肉有 4 个变体、陈皮排骨汤有 2 份，只选其中一个会造成假阴性。
 2. **约束**：语料没有烹饪时长，`10 分钟` 用 `difficulty_max=2` 代理，报告里必须写明。gold 选 3–5 道最符合意图的菜，同时单独统计 top-k 的约束合规率：合规率高但 gold 命中低，说明召回没覆盖“好答案”，不是排序问题。
 3. **多食材**：gold 选 3–5 道原料覆盖查询食材的菜；另统计 top-k 的食材覆盖率，只作辅助。
-4. **对比 / 多跳**：涉及的每道菜都进 gold；Recall 要求全中，MRR 看第一个命中的排名。
+4. **对比 / 多跳**：对比类涉及的每道菜都进 gold；多跳类给两个 `subgoals`（结构化 filters），检索用**子目标覆盖率**评估，固定 gold 对只作精确匹配参考。
 5. **拒答**：gold 为空，`expected_reason` 写清缺什么；答案只要给出具体菜谱或步骤即判错。
 
 ## 指标
 
 - Recall@5/10、MRR、nDCG@10（P1 用二值相关性，另取 30 条人工分级校准）
+- 多跳：子目标覆盖率@5/10（top-k 是否各覆盖一个子目标）+ 固定 gold 对的精确 Recall
 - 候选存活率、约束合规率、食材覆盖率、拒答准确率
 - Citation Precision（规则）、Faithfulness / Answer Relevancy（LLM judge + 20% 人工抽检）
 - tokens/query、p50/p95、工具调用次数
