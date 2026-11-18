@@ -296,11 +296,13 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--dry-run", action="store_true", help="只打印 prompt，不调用模型")
     parser.add_argument("--mock", action="store_true", help="用本地假模型跑通流程，不联网")
-    parser.add_argument("--model", default="deepseek-ai/DeepSeek-V4.1-Flash-1017")
-    parser.add_argument("--base-url", default="https://api-inference.modelscope.cn/v1")
+    parser.add_argument("--model", default=None)
+    parser.add_argument("--base-url", default=None)
     parser.add_argument("--api-key-env", default="MODELSCOPE_API_KEY")
     args = parser.parse_args()
     _load_dotenv()
+    model_id = args.model or os.environ.get("LLM_MODEL", "deepseek-chat")
+    base_url = args.base_url or os.environ.get("LLM_BASE_URL", "https://api.deepseek.com/v1")
 
     counts = parse_counts(args.counts)
     rng = random.Random(args.seed)
@@ -336,8 +338,8 @@ def main() -> int:
             return 2
         model = ChatModel(
             LLMConfig(
-                model=args.model,
-                base_url=args.base_url,
+                model=model_id,
+                base_url=base_url,
                 api_key=api_key,
                 temperature=0.8,
                 max_tokens=512,
