@@ -170,6 +170,28 @@ class SearchFilter:
         return ", ".join(parts) if parts else "无过滤"
 
 
+def recipe_as_chunk(recipe: Recipe) -> Chunk:
+    """把父文档投影成一个"只带元数据的空块"，让整篇菜也能复用块级过滤谓词。
+
+    检索层过滤的是 chunk，工具层枚举的是整篇 recipe；如果两处各写一套判断，
+    迟早出现"检索认为满足约束、枚举认为不满足"的分裂。这里只做投影，不复制逻辑。
+    """
+    return Chunk(
+        chunk_id=recipe.parent_id,
+        parent_id=recipe.parent_id,
+        source_rel=recipe.source_rel,
+        dish_name=recipe.dish_name,
+        category=recipe.category,
+        category_key=recipe.category_key,
+        difficulty=recipe.difficulty,
+        difficulty_level=recipe.difficulty_level,
+        section="",
+        section_path="",
+        chunk_index=0,
+        text="",
+    )
+
+
 @dataclass
 class ScoredChunk:
     """一个召回块的完整打分记录：两路各自的排名/分数 + 融合分。

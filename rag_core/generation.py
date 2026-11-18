@@ -68,20 +68,28 @@ class RecipeAnswerer:
     def build_context(self, result: RetrievalResult) -> BuiltContext:
         return build_context(result.parents, self.ctx_cfg)
 
-    def answer(self, query: str, result: RetrievalResult) -> Answer:
+    def answer(
+        self,
+        query: str,
+        result: RetrievalResult,
+        extra_context: str = "",
+    ) -> Answer:
         ctx = self.build_context(result)
-        if not ctx.text.strip():
+        if not ctx.text.strip() and not extra_context.strip():
             return Answer(
                 text="没有检索到相关菜谱，无法回答。",
                 context="",
                 sources=[],
                 ctx_stats=ctx.stats(),
             )
+        # extra_context 来自 Agent 的对比工具（结构化对照表），拼在原文之前：
+        # 先给结论性字段，再给依据，模型不容易漏掉其中一道菜
+        body = f"{extra_context}\n\n{ctx.text}" if extra_context.strip() else ctx.text
         messages = [
             {"role": "system", "content": self.system_prompt},
             {
                 "role": "user",
-                "content": USER_TEMPLATE.format(context=ctx.text, query=query),
+                "content": USER_TEMPLATE.format(context=body, query=query),
             },
         ]
         chat: ChatResult = self.llm.chat(messages)

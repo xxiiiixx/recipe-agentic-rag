@@ -9,13 +9,17 @@
 | 上游“混合检索”实际是纯向量 | 修好分词后，稀疏臂 Hit@1 0% → 83%；`char_bigram` 92% |
 | 过滤下推 | 候选 1701 → 164，约束查询合规率 40% → 100% |
 | 确定性索引 | 322 篇 → 1701 块，两次建库 `chunk_id` 完全一致 |
+| Agent 多路检索 | compare R@5 .938 → 1.000；整体 R@10 +0.025、nDCG +0.024（CI 不跨 0） |
+| 反思环 | 4 次触发、MRR +0.002 —— 如实记为无收益 |
 
-数字来自 `scripts/selfcheck.py`（hashing 向量 + local 后端，只验证机制）。真实 dense 指标在 P1 补齐。
+前三行来自 `scripts/selfcheck.py`（hashing 向量 + local 后端，只验证机制）；评测集与 Agent 的数字来自 `scripts/eval_retrieval.py` 与 `scripts/eval_agent.py`（105 test，bge-m3 + Milvus Lite）。
 
 ## 架构
 
 ```text
 Markdown → 按章节切块 → Milvus 向量 + BM25 → RRF 融合 → 父块回填 → 预算内截断 → 带引用生成
+                                                        ↑
+Agent: understand → plan → act → reflect → answer（工具层只经 schema 调用检索）
 ```
 
 `rag_core/` 不知道 Agent 存在；Agent 只能经工具 schema 调用它；评估只读 trace。
@@ -39,16 +43,19 @@ python scripts/selfcheck.py --root data/C8/cook --backend local --embedding hash
 
 ```text
 rag_core/    检索底座：切分 / 索引 / 双路召回 / RRF / 上下文 / 生成
+rag_core/agent/  P2：工具层 / 查询理解 / 状态机
 data/C8/     322 篇中文菜谱
+eval/        105 test + 15 dev 评测集与标注规则
 configs/     一份 YAML = 一次实验；server.yaml 继承 base.yaml
-scripts/     selfcheck / 模型探针
+scripts/     selfcheck / 检索与生成评测 / Agent 对照评测
 tests/       契约测试
-docs/        与上游差异 / 设计 / 跑通手册
+docs/        与上游差异 / 设计 / 跑通手册 / Agent 设计
 ```
 
 ## 文档
 
 - [设计与评测协议](docs/design.md)
+- [Agent 层设计](docs/agent.md)
 - [跑通与排错](docs/runbook.md)
 
 ## 路线图
@@ -56,8 +63,8 @@ docs/        与上游差异 / 设计 / 跑通手册
 | 阶段 | 内容 | 状态 |
 |---|---|---|
 | P0 | 检索底座、确定性 ID、过滤下推、可切换臂 | ✅ |
-| P1 | 105 条评测集 + 六组消融 | 进行中 |
-| P2 | 工具层 + LangGraph 状态机 + 反思 | 计划 |
+| P1 | 105 条评测集 + 六组消融 | ✅ |
+| P2 | 工具层 + 状态机 + 反思 | ✅ |
 | P3 | 规则版自适应检索深度 | 计划 |
 | P5 | trace 与 badcase 归因 | 计划 |
 

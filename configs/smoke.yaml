@@ -1,0 +1,17 @@
+# 离线冒烟：不装 torch、不连 Milvus、不调 API，验证"检索 -> 工具 -> 状态机"链路是否接通。
+# 向量是哈希特征，检索质量没有意义，只看流程与字段。真正的指标一律在服务器上跑。
+extends: base.yaml
+name: selfcheck
+workspace: artifacts
+
+embedding:
+  provider: hashing
+  model: hashing
+  dim: 256
+
+store:
+  backend: local
+  local_dir: artifacts/selfcheck/local_index
+
+llm:
+  model: none
