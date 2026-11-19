@@ -12,7 +12,7 @@ import pytest
 
 from rag_core.agent import RecipeAgent, RuleUnderstander, ToolBox
 from rag_core.agent.tools import extract_section, to_filter
-from rag_core.retrieval import rerank_by_difficulty
+from rag_core.retrieval import rerank_by_difficulty, select_parent_k
 from rag_core.schema import ParentHit, Recipe, SearchFilter, recipe_as_chunk
 
 
@@ -196,6 +196,34 @@ def test_enum_result_goes_to_context_not_evidence(rag: FakeRAG) -> None:
 def test_enum_context_can_be_disabled(rag: FakeRAG) -> None:
     run = RecipeAgent(rag, max_rounds=0, enum_context=False).run("有没有简单的汤")
     assert run.state.extra_context == ""
+
+
+# --------------------------------------------------------------------- 自适应 k
+def test_adaptive_k_cuts_when_gap_is_wide() -> None:
+    hits = [ParentHit(recipe=make_recipe("a", "甲"), score=1.0),
+            ParentHit(recipe=make_recipe("b", "乙"), score=0.2)]
+    assert select_parent_k(hits, floor=1, ceiling=2, gap=0.6) == 1
+
+
+def test_adaptive_k_keeps_two_when_gap_is_narrow() -> None:
+    hits = [ParentHit(recipe=make_recipe("a", "甲"), score=1.0),
+            ParentHit(recipe=make_recipe("b", "乙"), score=0.8)]
+    assert select_parent_k(hits, floor=1, ceiling=2, gap=0.6) == 2
+
+
+def test_adaptive_k_never_goes_below_floor() -> None:
+    hits = [ParentHit(recipe=make_recipe("a", "甲"), score=1.0),
+            ParentHit(recipe=make_recipe("b", "乙"), score=0.0)]
+    # 比较题 floor=2：断层再大也不能只给一篇
+    assert select_parent_k(hits, floor=2, ceiling=2, gap=0.6) == 2
+
+
+def test_adaptive_k_handles_short_or_zero_score_lists() -> None:
+    one = [ParentHit(recipe=make_recipe("a", "甲"), score=1.0)]
+    assert select_parent_k(one, floor=1, ceiling=2) == 1
+    zero = [ParentHit(recipe=make_recipe("a", "甲"), score=0.0),
+            ParentHit(recipe=make_recipe("b", "乙"), score=0.0)]
+    assert select_parent_k(zero, floor=1, ceiling=2) == 1
 
 
 def test_trace_is_json_serialisable(rag: FakeRAG) -> None:

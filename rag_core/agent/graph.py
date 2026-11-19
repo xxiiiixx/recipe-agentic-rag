@@ -21,6 +21,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Sequence
 
+from ..retrieval import select_parent_k
 from ..schema import ParentHit, recipe_as_chunk
 from .tools import ToolBox, ToolResult, to_filter
 from .understand import ParsedQuery, build_understander
@@ -109,6 +110,7 @@ class AgentState:
     answer: Any = None
     extra_context: str = ""
     latency_ms: float = 0.0
+    k_used: int = 0
     # 已经补检过的实体。词表外的别名永远无法被"菜名相等"判定覆盖，
     # 不记下来就会一直重试到轮次上限，把不相关的菜塞进证据里。
     attempted: set = field(default_factory=set)
@@ -161,6 +163,9 @@ class RecipeAgent:
         use_compare_tool: bool = True,
         answer_enabled: bool = False,
         enum_context: bool = True,
+        adaptive_k: bool = False,
+        parent_ceiling: int = 2,
+        k_gap: float = 0.6,
     ) -> None:
         self.rag = rag
         self.tools = ToolBox(rag)
@@ -172,6 +177,9 @@ class RecipeAgent:
         self.use_compare_tool = use_compare_tool
         self.answer_enabled = answer_enabled
         self.enum_context = enum_context
+        self.adaptive_k = adaptive_k
+        self.parent_ceiling = parent_ceiling
+        self.k_gap = k_gap
 
     # ------------------------------------------------------------------ 入口
     def run(self, query: str) -> AgentRun:
@@ -410,8 +418,18 @@ class RecipeAgent:
         ranked = state.evidence.ranked()
         if not ranked:
             return None
-        return answerer.answer(state.query, _RankedResult(ranked),
+        k = len(ranked) if not self.adaptive_k else select_parent_k(
+            ranked, floor=self._k_floor(state.parsed.intent),
+            ceiling=self.parent_ceiling, gap=self.k_gap,
+        )
+        state.k_used = k
+        return answerer.answer(state.query, _RankedResult(ranked[:k]),
                                extra_context=state.extra_context)
+
+    @staticmethod
+    def _k_floor(intent: str) -> int:
+        # 比较与多跳至少要两篇才有得比；条件型问题的 gold 通常有 4 道，别只给一篇
+        return 2 if intent in {"compare", "multi_hop", "constraint"} else 1
 
 
 def _relaxable(filters: Dict[str, Any]) -> List[str]:

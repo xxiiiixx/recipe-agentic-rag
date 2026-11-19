@@ -33,7 +33,7 @@ from rag_core.config import AppConfig
 from rag_core.generation import citation_precision
 from rag_core.llm import ChatModel, LLMConfig
 from rag_core.pipeline import RecipeRAG
-from rag_core.retrieval import rerank_by_difficulty
+from rag_core.retrieval import rerank_by_difficulty, select_parent_k
 from rag_core.schema import RetrievalResult, SearchFilter
 
 JUDGE_SYSTEM = "你是严格的 RAG 评测员。只输出一个 JSON 对象，不要 markdown，不要解释。"
@@ -88,6 +88,16 @@ def judge_answer(
     }
 
 
+def k_floor(intent: str) -> int:
+    return 2 if intent in {"compare", "multi_hop", "constraint"} else 1
+
+
+def pick_k(parents, intent: str, adaptive: bool, gap: float, ceiling: int) -> int:
+    if not adaptive:
+        return min(ceiling, len(parents))
+    return select_parent_k(parents, floor=k_floor(intent), ceiling=ceiling, gap=gap)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="生成评测")
     parser.add_argument("--config", required=True)
@@ -98,6 +108,10 @@ def main() -> int:
     parser.add_argument("--enum-context", default="on", choices=["on", "off"],
                         help="把全库枚举结果作为答案层补充上下文")
     parser.add_argument("--types", default="", help="只跑指定类型，逗号分隔")
+    parser.add_argument("--k-mode", default="fixed", choices=["fixed", "adaptive"],
+                        help="fixed=固定给 2 篇父文档；adaptive=按分数断层减到 1 篇")
+    parser.add_argument("--k-gap", type=float, default=0.6)
+    parser.add_argument("--parent-ceiling", type=int, default=2)
     parser.add_argument("--max-rounds", type=int, default=2)
     parser.add_argument("--out", required=True)
     parser.add_argument("--limit", type=int, default=0)
@@ -116,6 +130,8 @@ def main() -> int:
         rag, understander=understander, max_rounds=args.max_rounds,
         base_k=cfg.retrieval.top_k, answer_enabled=True,
         enum_context=args.enum_context == "on",
+        adaptive_k=args.k_mode == "adaptive", k_gap=args.k_gap,
+        parent_ceiling=args.parent_ceiling,
     )
 
     judge = ChatModel(
@@ -164,15 +180,19 @@ def main() -> int:
                     run = agent.run(row["query"])
                     answer = run.answer
                     steps = {"rounds": run.state.rounds,
-                             "tool_calls": len(run.state.evidence.tool_calls)}
+                             "tool_calls": len(run.state.evidence.tool_calls),
+                             "k_used": run.state.k_used}
                 else:
                     flt = SearchFilter(**parsed.filters) if parsed.filters else SearchFilter()
                     res = rag.retrieve(row["query"], flt=flt)
                     parents = rerank_by_difficulty(res.parents, flt)
+                    k = pick_k(parents, parsed.intent, args.k_mode == "adaptive",
+                               args.k_gap, args.parent_ceiling)
+                    parents = parents[:k]
                     answer = rag.answerer.answer(
                         row["query"], RetrievalResult(query=row["query"], fused=[], parents=parents)
                     )
-                    steps = {"rounds": 0, "tool_calls": 1}
+                    steps = {"rounds": 0, "tool_calls": 1, "k_used": k}
                 gen_ms = (time.perf_counter() - t0) * 1000
                 if answer is None:
                     raise RuntimeError("没有检索到证据，未生成答案")
@@ -242,6 +262,7 @@ def main() -> int:
             ) if ref else None,
             "tokens": statistics.mean(x["usage"].get("total_tokens", 0) for x in items),
             "tool_calls": statistics.mean(x.get("tool_calls", 0) for x in items),
+            "k_used": statistics.mean(x.get("k_used", 0) for x in items),
             "context_tokens": statistics.mean(x["context_tokens"] for x in items),
             "used_docs": statistics.mean(x["used_docs"] for x in items),
             "truncated_docs": statistics.mean(x["truncated_docs"] for x in items),
@@ -258,6 +279,7 @@ def main() -> int:
         "split": args.split,
         "arm": args.arm,
         "understand": args.understand,
+        "k_mode": args.k_mode,
         "overall": agg(all_rows),
         "by_type": {k: agg(v) for k, v in by_type.items()},
     }
@@ -266,18 +288,20 @@ def main() -> int:
 
     a = report["overall"]
     print(f"\n{'type':<18}{'n':>4}{'faith':>8}{'rel':>7}{'cite':>7}{'refuse':>8}"
-          f"{'tokens':>8}{'ctx':>7}{'calls':>7}{'p50':>7}")
+          f"{'tokens':>8}{'ctx':>7}{'calls':>7}{'k':>6}{'p50':>7}")
     for typ, items in by_type.items():
         b = agg(items)
         print(f"{typ:<18}{b['n']:>4}{b['faithfulness'] if b['faithfulness'] is not None else 0:>8.3f}"
               f"{b['relevance'] if b['relevance'] is not None else 0:>7.2f}"
               f"{b['citation_precision'] if b['citation_precision'] is not None else 0:>7.3f}"
               f"{b['refusal_accuracy'] if b['refusal_accuracy'] is not None else 0:>8.3f}"
-              f"{b['tokens']:>8.0f}{b['context_tokens']:>7.0f}{b['tool_calls']:>7.2f}{b['p50_ms']:>7.0f}")
+              f"{b['tokens']:>8.0f}{b['context_tokens']:>7.0f}{b['tool_calls']:>7.2f}"
+              f"{b['k_used']:>6.2f}{b['p50_ms']:>7.0f}")
     print(f"{'overall':<18}{a['n']:>4}{a['faithfulness']:>8.3f}{a['relevance']:>7.2f}"
           f"{a['citation_precision']:>7.3f}"
           f"{a['refusal_accuracy'] if a['refusal_accuracy'] is not None else 0:>8.3f}"
-          f"{a['tokens']:>8.0f}{a['context_tokens']:>7.0f}{a['tool_calls']:>7.2f}{a['p50_ms']:>7.0f}")
+          f"{a['tokens']:>8.0f}{a['context_tokens']:>7.0f}{a['tool_calls']:>7.2f}"
+          f"{a['k_used']:>6.2f}{a['p50_ms']:>7.0f}")
     print(f"\n写入 {out} 与 {summary_path}")
     return 0
 

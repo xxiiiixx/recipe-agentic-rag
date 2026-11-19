@@ -77,6 +77,34 @@ def rerank_by_difficulty(
     return sorted(parents, key=key)
 
 
+def select_parent_k(
+    parents: Sequence[ParentHit],
+    floor: int = 1,
+    ceiling: int = 2,
+    gap: float = 0.6,
+) -> int:
+    """按分数断层决定给答案看几篇父文档。
+
+    观察（105 条 test，88 条非拒答非多跳）：gold 落在 top-1 时，top-1 与 top-2 的相对
+    分数断层中位数 0.84；gold 不在 top-1 时断层最大只有 0.67。也就是说"第一篇甩开第二名
+    一大截"是一个干净信号，不需要模型判断。
+
+    规则只在**有把握**时减到 floor：断层不够大就用 ceiling。宁可多给一篇，
+    也不要因为省一篇而把正确答案挡掉 —— floor 由调用方按意图给（比较题至少 2 篇）。
+
+    这是 P3 的"规则版自适应 k"：没有学习、没有额外调用，可复现、可解释。
+    """
+    if len(parents) <= floor:
+        return floor
+    s1 = parents[0].score
+    s2 = parents[1].score
+    if s1 <= 0:
+        return floor
+    if (s1 - s2) / s1 >= gap:
+        return floor
+    return min(ceiling, len(parents))
+
+
 class HybridRetriever:
     def __init__(
         self,

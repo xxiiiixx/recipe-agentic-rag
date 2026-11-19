@@ -11,6 +11,7 @@
 | 确定性索引 | 322 篇 → 1701 块，两次建库 `chunk_id` 完全一致 |
 | 查询解析 + 难度重排 | compare .938 → 1.000、single_hop .943 → 1.000；constraint R@5 .563 → .633 |
 | Agent 编排 | 检索 R@10 +0.011、答案相关度 −0.011（均不显著），多花 41 tokens/query —— 无可测收益，如实记录 |
+| 自适应 k | 上下文 tokens −54.7/query（−6.8%），答案相关度持平 |
 
 前三行来自 `scripts/selfcheck.py`（hashing 向量 + local 后端，只验证机制）；评测集与 Agent 的数字来自 `scripts/eval_retrieval.py` 与 `scripts/eval_agent.py`（105 test，bge-m3 + Milvus Lite）。
 
@@ -65,7 +66,7 @@ docs/        与上游差异 / 设计 / 跑通手册 / Agent 设计
 | P0 | 检索底座、确定性 ID、过滤下推、可切换臂 | ✅ |
 | P1 | 105 条评测集 + 六组消融 | ✅ |
 | P2 | 工具层 + 状态机 + 反思 | ✅ |
-| P3 | 规则版自适应检索深度 | 计划 |
+| P3 | 规则版自适应检索深度 | ✅ |
 | P5 | trace 与 badcase 归因 | 计划 |
 
 P4 重排不做：组件成熟、对 T4 收益低。
