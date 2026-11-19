@@ -12,7 +12,8 @@ import pytest
 
 from rag_core.agent import RecipeAgent, RuleUnderstander, ToolBox
 from rag_core.agent.tools import extract_section, to_filter
-from rag_core.schema import ParentHit, Recipe, recipe_as_chunk
+from rag_core.retrieval import rerank_by_difficulty
+from rag_core.schema import ParentHit, Recipe, SearchFilter, recipe_as_chunk
 
 
 def make_recipe(pid: str, dish: str, category_key: str = "meat_dish",
@@ -191,3 +192,33 @@ def test_trace_is_json_serialisable(rag: FakeRAG) -> None:
     run = RecipeAgent(rag, max_rounds=1).run("红烧肉和番茄炒蛋哪个更简单")
     payload = json.dumps(run.to_trace(), ensure_ascii=False)
     assert "tool_calls" in payload
+
+
+# --------------------------------------------------------------------- 难度重排
+def _hits(*levels: int) -> list[ParentHit]:
+    return [ParentHit(recipe=make_recipe(f"p{i}", f"菜{i}", level=lvl), score=1.0 / (i + 1))
+            for i, lvl in enumerate(levels)]
+
+
+def test_rerank_puts_simplest_first() -> None:
+    hits = _hits(3, 1, 2)
+    out = rerank_by_difficulty(hits, SearchFilter(difficulty_max=2))
+    assert [h.recipe.difficulty_level for h in out] == [1, 2, 3]
+
+
+def test_rerank_keeps_unknown_difficulty_last() -> None:
+    hits = _hits(0, 2, 1)
+    out = rerank_by_difficulty(hits, SearchFilter(difficulty_max=3))
+    assert [h.recipe.difficulty_level for h in out] == [1, 2, 0]
+
+
+def test_rerank_reverses_for_hard_queries() -> None:
+    hits = _hits(1, 3, 2)
+    out = rerank_by_difficulty(hits, SearchFilter(difficulty_min=3))
+    assert [h.recipe.difficulty_level for h in out] == [3, 2, 1]
+
+
+def test_rerank_is_noop_without_difficulty_preference() -> None:
+    hits = _hits(3, 1, 2)
+    out = rerank_by_difficulty(hits, SearchFilter(category_keys=["soup"]))
+    assert [h.recipe.difficulty_level for h in out] == [3, 1, 2]

@@ -47,18 +47,15 @@ class Evidence:
     parents: Dict[str, _Acc] = field(default_factory=dict)
     tool_calls: List[Dict[str, Any]] = field(default_factory=list)
 
-    def add(self, query: str, hits: Sequence[ParentHit], rrf_k: int = 60,
-            weight: float = 1.0) -> None:
-        """按名次累加 weight/(k+rank)，等价于"跨子查询做一次加权 RRF"。
+    def add(self, query: str, hits: Sequence[ParentHit], rrf_k: int = 60) -> None:
+        """按名次累加 1/(k+rank)，等价于"跨子查询做一次 RRF"。
 
-        不同子查询的原始分数不可比（一个查菜名、一个查约束），但名次可比。
-        weight 用来表达"这条来源的排序有多可信"：检索结果的排序是相关性排的，
-        枚举结果的排序是按难度和菜名排的，后者只能算兜底，权重压低。
+        不同子查询的原始分数不可比（一个查菜名、一个查条件），但名次可比。
         """
         for rank, hit in enumerate(hits, start=1):
             pid = hit.recipe.parent_id
             acc = self.parents.get(pid)
-            contrib = weight / (rrf_k + rank)
+            contrib = 1.0 / (rrf_k + rank)
             if acc is None:
                 self.parents[pid] = _Acc(
                     recipe=hit.recipe, score=contrib, best=hit.score,
@@ -267,8 +264,14 @@ class RecipeAgent:
             elif result.tool == "filter_by_constraints":
                 record["count"] = result.data["count"]
                 record["dishes"] = [d["dish_name"] for d in result.data["dishes"]]
-                state.evidence.add(f"enum:{result.data['filters']}",
-                                   self._enum_hits(result), weight=0.5)
+                # 枚举结果**不进证据池**：它没有相关性分数，混进按相关性排的池子只会
+                # 把更相关的结果挤下去。它的用途是回答"一共有多少 / 都有哪些"，
+                # 所以只作为答案层的补充上下文。
+                names = [d["dish_name"] for d in result.data["dishes"]]
+                state.extra_context = (
+                    f"【全库枚举】满足条件的菜共 {result.data['count']} 道，"
+                    f"其中前 {len(names)} 道：{'、'.join(names)}"
+                )
             elif result.tool == "compare_recipes":
                 record["table"] = result.data["table"]
                 state.extra_context = result.data["table"]
@@ -295,12 +298,6 @@ class RecipeAgent:
                 hits.append(ParentHit(recipe=recipe, score=p["score"],
                                       hit_chunks=p["hit_chunks"]))
         return hits
-
-    def _enum_hits(self, result: ToolResult) -> List[ParentHit]:
-        by_id = {r.parent_id: r for r in self.rag.dataset.recipes}
-        # 枚举没有相关性分数，给一个恒定的小分，靠名次参与 RRF
-        return [ParentHit(recipe=by_id[d["parent_id"]], score=0.0)
-                for d in result.data["dishes"] if d["parent_id"] in by_id]
 
     def _covered(self, entity: str, ranked: Sequence[ParentHit]) -> bool:
         """实体是否已被证据覆盖。

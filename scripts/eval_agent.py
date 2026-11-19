@@ -41,6 +41,7 @@ from rag_core.agent import ParsedQuery, RecipeAgent, build_understander
 from rag_core.config import AppConfig
 from rag_core.context import ContextConfig, build_context
 from rag_core.pipeline import RecipeRAG
+from rag_core.retrieval import rerank_by_difficulty
 from rag_core.schema import ParentHit, SearchFilter, recipe_as_chunk
 from rag_core.stats import format_ci, paired_bootstrap
 
@@ -132,13 +133,14 @@ def run_static(rag: RecipeRAG, query: str, filters: Dict[str, Any], top_k: int,
     # 不覆盖 top_k：让 retriever 按 eval 深度（top_k*3）融合，再在外面切到 top_k。
     # 传 top_k=10 会把融合结果先截到 10 个块，父文档数量跟着变少，和基线口径对不上。
     res = rag.retrieve(query, flt=flt)
-    parents = res.parents[:top_k]
+    # 四臂统一带难度重排，否则比较里混进了"某一臂少一个机制"
+    parents = rerank_by_difficulty(res.parents, flt)[:top_k]
     latency = (time.perf_counter() - t0) * 1000
     usage = {}
     if answerer_on and rag.answerer is not None:
         ans = rag.answerer.answer(query, res)
         usage = ans.usage or {}
-    return res.parents[:top_k], {
+    return parents, {
         "latency_ms": latency, "tool_calls": 1, "rounds": 0,
         "stop_reason": "single_pass", "tokens": usage.get("total_tokens", 0),
         "ctx_tokens": build_context(parents, ctx_cfg).tokens,

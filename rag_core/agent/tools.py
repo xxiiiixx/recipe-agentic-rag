@@ -17,6 +17,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
+from ..retrieval import rerank_by_difficulty
 from ..schema import ParentHit, Recipe, ScoredChunk, SearchFilter, recipe_as_chunk
 
 _TIME_RE = re.compile(r"预计(?:烹饪)?时间[：:]\s*([^\n]+)")
@@ -138,6 +139,7 @@ class SearchRecipesTool:
         try:
             flt = to_filter(filters)
             res = self.rag.retrieve(query, flt=flt, top_k=top_k, arms=arms)
+            parents = rerank_by_difficulty(res.parents, flt)
             return ToolResult(
                 tool=self.spec.name,
                 ok=True,
@@ -147,7 +149,7 @@ class SearchRecipesTool:
                     "filters": flt.describe(),
                     "candidates": res.candidates,
                     "empty_reason": res.extras.get("empty_reason", ""),
-                    "parents": [parent_dict(p) for p in res.parents],
+                    "parents": [parent_dict(p) for p in parents],
                     "top_chunks": [chunk_dict(c) for c in res.fused[:top_k]],
                 },
             )

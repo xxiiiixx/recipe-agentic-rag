@@ -9,8 +9,8 @@
 | 上游“混合检索”实际是纯向量 | 修好分词后，稀疏臂 Hit@1 0% → 83%；`char_bigram` 92% |
 | 过滤下推 | 候选 1701 → 164，约束查询合规率 40% → 100% |
 | 确定性索引 | 322 篇 → 1701 块，两次建库 `chunk_id` 完全一致 |
-| Agent 多路检索 | compare R@5 .938 → 1.000；整体 R@10 +0.025、nDCG +0.024（CI 不跨 0） |
-| 反思环 | 4 次触发、MRR +0.002 —— 如实记为无收益 |
+| 查询解析 + 难度重排 | compare .938 → 1.000、single_hop .943 → 1.000；constraint R@5 .563 → .633 |
+| Agent 编排 | 多路检索只剩 multi_hop 收益（R@10 .071 → .214）；反思环无收益，如实记录 |
 
 前三行来自 `scripts/selfcheck.py`（hashing 向量 + local 后端，只验证机制）；评测集与 Agent 的数字来自 `scripts/eval_retrieval.py` 与 `scripts/eval_agent.py`（105 test，bge-m3 + Milvus Lite）。
 
