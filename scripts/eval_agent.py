@@ -37,7 +37,7 @@ from typing import Any, Dict, List, Sequence, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from rag_core.agent import ParsedQuery, RecipeAgent, build_understander
+from rag_core.agent import CachedUnderstander, RecipeAgent, build_understander
 from rag_core.config import AppConfig
 from rag_core.context import ContextConfig, build_context
 from rag_core.pipeline import RecipeRAG
@@ -46,23 +46,6 @@ from rag_core.schema import ParentHit, SearchFilter, recipe_as_chunk
 from rag_core.stats import format_ci, paired_bootstrap
 
 ARMS = ("static-oracle", "static-parsed", "agent-plan", "agent-full")
-
-
-class CachedUnderstander:
-    """同一条 query 的解析结果只算一次。
-
-    static-parsed 与 agent 必须共用同一份解析，否则两臂的差异里混进了
-    "两次 LLM 解析不一致"这个与假设无关的噪声。
-    """
-
-    def __init__(self, inner) -> None:
-        self.inner = inner
-        self.cache: Dict[str, ParsedQuery] = {}
-
-    def parse(self, query: str) -> ParsedQuery:
-        if query not in self.cache:
-            self.cache[query] = self.inner.parse(query)
-        return self.cache[query]
 
 
 # --------------------------------------------------------------------- 指标

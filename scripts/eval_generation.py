@@ -1,11 +1,15 @@
-"""生成评测：truncate vs drop 上下文策略，含 LLM judge。
+"""生成评测：对比不同答案链路的答案质量，含 LLM judge。
+
+两臂共用同一个解析器、同一个生成模型、同一个裁判，只差"怎么拿到证据"：
+
+- ``static``：解析约束 -> 一次检索 -> 难度重排 -> 拼上下文 -> 生成
+- ``agent``：状态机 + 工具（对比表、全库枚举）-> 生成
 
 用法：
     python scripts/eval_generation.py \
-      --config /backup01/caiwang/recipe-rag/configs/ablation/ab-context-truncate.yaml \
-      --queries eval/queries.jsonl --split test \
-      --out /backup01/caiwang/recipe-rag/outputs/generation/truncate.jsonl \
-      --resume
+      --config /backup01/caiwang/recipe-rag/configs/local-hit.yaml \
+      --queries eval/queries.jsonl --split test --arm agent \
+      --out /backup01/caiwang/recipe-rag/outputs/generation/agent.jsonl --resume
 
 每条 query：检索 -> 拼上下文 -> DeepSeek 生成 -> DeepSeek judge。
 judge 只看问题、上下文、回答，不看 gold。
@@ -24,11 +28,13 @@ from typing import Any, Dict, List
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from rag_core.agent import CachedUnderstander, RecipeAgent, build_understander
 from rag_core.config import AppConfig
 from rag_core.generation import citation_precision
 from rag_core.llm import ChatModel, LLMConfig
 from rag_core.pipeline import RecipeRAG
-from rag_core.schema import SearchFilter
+from rag_core.retrieval import rerank_by_difficulty
+from rag_core.schema import RetrievalResult, SearchFilter
 
 JUDGE_SYSTEM = "你是严格的 RAG 评测员。只输出一个 JSON 对象，不要 markdown，不要解释。"
 
@@ -83,10 +89,16 @@ def judge_answer(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="生成评测（truncate vs drop）")
+    parser = argparse.ArgumentParser(description="生成评测")
     parser.add_argument("--config", required=True)
     parser.add_argument("--queries", default="eval/queries.jsonl")
     parser.add_argument("--split", default="test", choices=["test", "dev", "all"])
+    parser.add_argument("--arm", default="static", choices=["static", "agent"])
+    parser.add_argument("--understand", default="llm", choices=["rules", "llm"])
+    parser.add_argument("--enum-context", default="on", choices=["on", "off"],
+                        help="把全库枚举结果作为答案层补充上下文")
+    parser.add_argument("--types", default="", help="只跑指定类型，逗号分隔")
+    parser.add_argument("--max-rounds", type=int, default=2)
     parser.add_argument("--out", required=True)
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--resume", action="store_true")
@@ -96,6 +108,15 @@ def main() -> int:
     rag = RecipeRAG.load(cfg)
     if rag.answerer is None:
         raise SystemExit("未配置 LLM，无法生成")
+
+    understander = CachedUnderstander(build_understander(rag, args.understand))
+    # base_k 与配置的 top_k 对齐：两臂的检索深度必须一致，否则单跳查询的差异
+    # 里混进了"融合后取几条"这个与 Agent 无关的变量
+    agent = RecipeAgent(
+        rag, understander=understander, max_rounds=args.max_rounds,
+        base_k=cfg.retrieval.top_k, answer_enabled=True,
+        enum_context=args.enum_context == "on",
+    )
 
     judge = ChatModel(
         LLMConfig(
@@ -116,6 +137,9 @@ def main() -> int:
     ]
     if args.split != "all":
         rows = [r for r in rows if r["split"] == args.split]
+    if args.types:
+        wanted = {t.strip() for t in args.types.split(",") if t.strip()}
+        rows = [r for r in rows if r["type"] in wanted]
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -133,11 +157,25 @@ def main() -> int:
     mode = "a" if args.resume else "w"
     with out.open(mode, encoding="utf-8") as fh:
         for i, row in enumerate(rows, start=1):
-            flt = SearchFilter(**row.get("filters", {}))
+            parsed = understander.parse(row["query"])
             t0 = time.perf_counter()
             try:
-                answer, _ = rag.ask(row["query"], flt=flt)
+                if args.arm == "agent":
+                    run = agent.run(row["query"])
+                    answer = run.answer
+                    steps = {"rounds": run.state.rounds,
+                             "tool_calls": len(run.state.evidence.tool_calls)}
+                else:
+                    flt = SearchFilter(**parsed.filters) if parsed.filters else SearchFilter()
+                    res = rag.retrieve(row["query"], flt=flt)
+                    parents = rerank_by_difficulty(res.parents, flt)
+                    answer = rag.answerer.answer(
+                        row["query"], RetrievalResult(query=row["query"], fused=[], parents=parents)
+                    )
+                    steps = {"rounds": 0, "tool_calls": 1}
                 gen_ms = (time.perf_counter() - t0) * 1000
+                if answer is None:
+                    raise RuntimeError("没有检索到证据，未生成答案")
                 is_refusal = row["type"] == "refusal"
                 try:
                     judged = judge_answer(
@@ -150,7 +188,10 @@ def main() -> int:
                 record = {
                     "qid": row["qid"],
                     "type": row["type"],
+                    "arm": args.arm,
                     "query": row["query"],
+                    "parsed": parsed.to_dict(),
+                    **steps,
                     "answer": answer.text,
                     "sources": answer.sources,
                     "context_tokens": answer.ctx_stats.get("context_tokens", 0),
@@ -167,9 +208,10 @@ def main() -> int:
                 }
                 fh.write(json.dumps(record, ensure_ascii=False) + "\n")
                 fh.flush()
-                print(f"[{i}/{len(rows)}] {row['qid']} {gen_ms:.0f}ms")
+                print(f"[{i}/{len(rows)}] {row['qid']} {gen_ms:.0f}ms", flush=True)
             except Exception as exc:
-                print(f"[{i}/{len(rows)}] {row['qid']} FAIL {type(exc).__name__}: {exc}")
+                print(f"[{i}/{len(rows)}] {row['qid']} FAIL {type(exc).__name__}: {exc}",
+                      flush=True)
 
     # 汇总
     all_rows = [
@@ -199,6 +241,7 @@ def main() -> int:
                 1 if x["judge"].get("refusal_correct") else 0 for x in ref
             ) if ref else None,
             "tokens": statistics.mean(x["usage"].get("total_tokens", 0) for x in items),
+            "tool_calls": statistics.mean(x.get("tool_calls", 0) for x in items),
             "context_tokens": statistics.mean(x["context_tokens"] for x in items),
             "used_docs": statistics.mean(x["used_docs"] for x in items),
             "truncated_docs": statistics.mean(x["truncated_docs"] for x in items),
@@ -213,6 +256,8 @@ def main() -> int:
     report = {
         "config": args.config,
         "split": args.split,
+        "arm": args.arm,
+        "understand": args.understand,
         "overall": agg(all_rows),
         "by_type": {k: agg(v) for k, v in by_type.items()},
     }
@@ -220,18 +265,19 @@ def main() -> int:
     summary_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
     a = report["overall"]
-    print(f"\n{'type':<18}{'n':>4}{'faith':>8}{'rel':>7}{'cite':>7}{'refuse':>8}{'tokens':>8}{'ctx':>7}{'p50':>7}")
+    print(f"\n{'type':<18}{'n':>4}{'faith':>8}{'rel':>7}{'cite':>7}{'refuse':>8}"
+          f"{'tokens':>8}{'ctx':>7}{'calls':>7}{'p50':>7}")
     for typ, items in by_type.items():
         b = agg(items)
         print(f"{typ:<18}{b['n']:>4}{b['faithfulness'] if b['faithfulness'] is not None else 0:>8.3f}"
               f"{b['relevance'] if b['relevance'] is not None else 0:>7.2f}"
               f"{b['citation_precision'] if b['citation_precision'] is not None else 0:>7.3f}"
               f"{b['refusal_accuracy'] if b['refusal_accuracy'] is not None else 0:>8.3f}"
-              f"{b['tokens']:>8.0f}{b['context_tokens']:>7.0f}{b['p50_ms']:>7.0f}")
+              f"{b['tokens']:>8.0f}{b['context_tokens']:>7.0f}{b['tool_calls']:>7.2f}{b['p50_ms']:>7.0f}")
     print(f"{'overall':<18}{a['n']:>4}{a['faithfulness']:>8.3f}{a['relevance']:>7.2f}"
           f"{a['citation_precision']:>7.3f}"
           f"{a['refusal_accuracy'] if a['refusal_accuracy'] is not None else 0:>8.3f}"
-          f"{a['tokens']:>8.0f}{a['context_tokens']:>7.0f}{a['p50_ms']:>7.0f}")
+          f"{a['tokens']:>8.0f}{a['context_tokens']:>7.0f}{a['tool_calls']:>7.2f}{a['p50_ms']:>7.0f}")
     print(f"\n写入 {out} 与 {summary_path}")
     return 0
 

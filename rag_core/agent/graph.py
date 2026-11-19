@@ -160,6 +160,7 @@ class RecipeAgent:
         per_entity_k: int = 3,
         use_compare_tool: bool = True,
         answer_enabled: bool = False,
+        enum_context: bool = True,
     ) -> None:
         self.rag = rag
         self.tools = ToolBox(rag)
@@ -170,6 +171,7 @@ class RecipeAgent:
         self.per_entity_k = per_entity_k
         self.use_compare_tool = use_compare_tool
         self.answer_enabled = answer_enabled
+        self.enum_context = enum_context
 
     # ------------------------------------------------------------------ 入口
     def run(self, query: str) -> AgentRun:
@@ -265,13 +267,13 @@ class RecipeAgent:
                 record["count"] = result.data["count"]
                 record["dishes"] = [d["dish_name"] for d in result.data["dishes"]]
                 # 枚举结果**不进证据池**：它没有相关性分数，混进按相关性排的池子只会
-                # 把更相关的结果挤下去。它的用途是回答"一共有多少 / 都有哪些"，
-                # 所以只作为答案层的补充上下文。
-                names = [d["dish_name"] for d in result.data["dishes"]]
-                state.extra_context = (
-                    f"【全库枚举】满足条件的菜共 {result.data['count']} 道，"
-                    f"其中前 {len(names)} 道：{'、'.join(names)}"
-                )
+                # 把更相关的结果挤下去。是否把它作为答案层的补充上下文，由 enum_context 决定。
+                if self.enum_context:
+                    names = [d["dish_name"] for d in result.data["dishes"]]
+                    state.extra_context = (
+                        f"【全库枚举】满足条件的菜共 {result.data['count']} 道，"
+                        f"其中前 {len(names)} 道：{'、'.join(names)}"
+                    )
             elif result.tool == "compare_recipes":
                 record["table"] = result.data["table"]
                 state.extra_context = result.data["table"]

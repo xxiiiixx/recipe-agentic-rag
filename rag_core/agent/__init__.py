@@ -6,11 +6,12 @@
 
 from .graph import AgentRun, AgentState, Evidence, RecipeAgent, Reflection
 from .tools import ToolBox, ToolResult, ToolSpec, recipe_profile
-from .understand import ParsedQuery, RuleUnderstander, build_understander
+from .understand import CachedUnderstander, ParsedQuery, RuleUnderstander, build_understander
 
 __all__ = [
     "AgentRun",
     "AgentState",
+    "CachedUnderstander",
     "Evidence",
     "ParsedQuery",
     "RecipeAgent",

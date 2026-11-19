@@ -10,7 +10,7 @@
 | 过滤下推 | 候选 1701 → 164，约束查询合规率 40% → 100% |
 | 确定性索引 | 322 篇 → 1701 块，两次建库 `chunk_id` 完全一致 |
 | 查询解析 + 难度重排 | compare .938 → 1.000、single_hop .943 → 1.000；constraint R@5 .563 → .633 |
-| Agent 编排 | 多路检索只剩 multi_hop 收益（R@10 .071 → .214）；反思环无收益，如实记录 |
+| Agent 编排 | 检索 R@10 +0.011、答案相关度 −0.011（均不显著），多花 41 tokens/query —— 无可测收益，如实记录 |
 
 前三行来自 `scripts/selfcheck.py`（hashing 向量 + local 后端，只验证机制）；评测集与 Agent 的数字来自 `scripts/eval_retrieval.py` 与 `scripts/eval_agent.py`（105 test，bge-m3 + Milvus Lite）。
 

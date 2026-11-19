@@ -186,6 +186,18 @@ def test_plan_only_arm_has_no_reflection_rounds(rag: FakeRAG) -> None:
     assert run.state.stop_reason in {"max_rounds", "evidence_ok"}
 
 
+def test_enum_result_goes_to_context_not_evidence(rag: FakeRAG) -> None:
+    run = RecipeAgent(rag, max_rounds=0, enum_context=True).run("有没有简单的汤")
+    assert "全库枚举" in run.state.extra_context
+    # 枚举结果不进证据池：它没有相关性信号
+    assert all("enum:" not in q for acc in run.state.evidence.parents.values() for q in acc.queries)
+
+
+def test_enum_context_can_be_disabled(rag: FakeRAG) -> None:
+    run = RecipeAgent(rag, max_rounds=0, enum_context=False).run("有没有简单的汤")
+    assert run.state.extra_context == ""
+
+
 def test_trace_is_json_serialisable(rag: FakeRAG) -> None:
     import json
 

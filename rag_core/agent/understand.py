@@ -220,6 +220,23 @@ class LLMUnderstander:
                            source="llm", raw=data)
 
 
+class CachedUnderstander:
+    """同一条 query 只解析一次。
+
+    评测里多个臂必须共用同一份解析结果，否则臂间差异会混进"两次解析不一致"这个
+    与假设无关的噪声 —— 尤其是 LLM 解析，temperature=0 下跨调用仍可能不同。
+    """
+
+    def __init__(self, inner) -> None:
+        self.inner = inner
+        self.cache: Dict[str, ParsedQuery] = {}
+
+    def parse(self, query: str) -> ParsedQuery:
+        if query not in self.cache:
+            self.cache[query] = self.inner.parse(query)
+        return self.cache[query]
+
+
 def _parse_json(text: str) -> Dict[str, Any]:
     """容忍 ```json 围栏和前后废话的 JSON 提取。"""
     text = text.strip()

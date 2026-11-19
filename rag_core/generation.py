@@ -95,7 +95,9 @@ class RecipeAnswerer:
         chat: ChatResult = self.llm.chat(messages)
         return Answer(
             text=chat.text,
-            context=ctx.text,
+            # 存实际送进模型的正文，而不是只说文：Agent 的对照表也在里面，
+            # 否则 judge 会看到"回答引用了上下文里没有的内容"，判成不忠实
+            context=body,
             sources=ctx.citations(),
             usage=chat.usage,
             latency_ms=chat.latency_ms,
